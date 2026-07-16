@@ -54,13 +54,14 @@ services:
   snmpcanvas:
     build: .        # or a published image once available
     ports: ["9161:9161"]
-    volumes: ["./data:/data"]
+    volumes: ["./data:/data:z"]   # :z = SELinux label; no-op elsewhere
     environment:
       - TZ=America/New_York
     restart: unless-stopped
 ```
 
 ```
+mkdir -p data && sudo chown 1000:1000 data   # container runs as uid 1000
 docker compose up -d
 ```
 

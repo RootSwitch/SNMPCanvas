@@ -32,6 +32,11 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
     -subj "/CN=$CN" -addext "subjectAltName=$SAN"
 chmod 600 "$DIR/server.key"
 
+# The container runs as the "node" user (uid 1000); it must be able to read
+# the key. Best-effort — rerun with sudo if this warns.
+chown -R 1000:1000 "$DIR" 2>/dev/null || \
+    echo "NOTE: could not chown $DIR to uid 1000 — run: sudo chown -R 1000:1000 $DIR"
+
 echo ""
 echo "Wrote $DIR/server.crt and server.key (valid 10 years, SAN: $SAN)."
 echo "Restart SNMPCanvas (docker compose restart) to enable HTTPS."

@@ -11,7 +11,11 @@ services:
       # TLS certs (data/certs/), and snmp-status.json — so a dashboard
       # container on the same host can read ./data/snmp-status.json directly,
       # or you can bind a second volume and point Settings → export path at it.
-      - ./data:/data
+      # Create it writable by the container user first:
+      #   mkdir -p data && sudo chown 1000:1000 data
+      # The :z suffix labels the mount for SELinux hosts (RHEL/Rocky/Fedora);
+      # it's a no-op elsewhere.
+      - ./data:/data:z
     environment:
       - TZ=America/New_York
       # Optional: pre-set the admin password (otherwise the UI offers a

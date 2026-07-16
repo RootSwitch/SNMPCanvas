@@ -24,9 +24,18 @@ const CERT_PATH = process.env.TLS_CERT || path.join(DATA_DIR, 'certs', 'server.c
 const KEY_PATH = process.env.TLS_KEY || path.join(DATA_DIR, 'certs', 'server.key');
 let tlsOptions = null;
 if (fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) {
-    tlsOptions = { cert: fs.readFileSync(CERT_PATH), key: fs.readFileSync(KEY_PATH) };
-    // Session cookies default to Secure over HTTPS (COOKIE_SECURE=0 overrides).
-    if (process.env.COOKIE_SECURE === undefined) process.env.COOKIE_SECURE = '1';
+    try {
+        tlsOptions = { cert: fs.readFileSync(CERT_PATH), key: fs.readFileSync(KEY_PATH) };
+        // Session cookies default to Secure over HTTPS (COOKIE_SECURE=0 overrides).
+        if (process.env.COOKIE_SECURE === undefined) process.env.COOKIE_SECURE = '1';
+    } catch (err) {
+        // Unreadable cert (usually file ownership: the container runs as uid
+        // 1000) — stay up on HTTP rather than crashlooping.
+        console.error(new Date().toISOString(),
+            `[server] TLS cert found but unreadable (${err.message}) — falling back to HTTP. ` +
+            'Fix ownership: chown -R 1000:1000 data/certs');
+        tlsOptions = null;
+    }
 }
 
 const MIME = {
