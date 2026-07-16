@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SNMPCanvas</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="topbar">
+    <span class="brand">
+        <span class="logo">
+            <!-- faceplate mark: chassis in accent, "graph pulse" ports in brand colors -->
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                <rect x="2" y="5" width="20" height="14" rx="2.5"/>
+                <polyline points="5,14.5 9,14.5 11,9.5 13,16.5 15,12.5 19,12.5"
+                          stroke="var(--se-logo-a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </span>
+        <span class="brand-name">SNMPCanvas</span>
+    </span>
+    <nav id="nav" style="display:none">
+        <a href="#/devices" data-nav="devices">Devices</a>
+        <a href="#/settings" data-nav="settings">Settings</a>
+    </nav>
+    <span class="topbar-spacer"></span>
+    <select id="theme-select" title="Theme"></select>
+    <button id="logout-btn" style="display:none">Log out</button>
+</div>
+<div id="main"></div>
+<dialog id="modal"></dialog>
+<script src="themes.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

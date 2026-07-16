@@ -1,0 +1,27 @@
+services:
+  snmpcanvas:
+    build: .
+    container_name: snmpcanvas
+    # Default port 9161 ("161" for SNMP) — stays clear of UptimeKuma (3001)
+    # and CrossCanvas/PingCanvas (8080/8443) on a shared docker host.
+    ports:
+      - "9161:9161"
+    volumes:
+      # Everything persistent lives here ON THE HOST: the SQLite database,
+      # TLS certs (data/certs/), and snmp-status.json — so a dashboard
+      # container on the same host can read ./data/snmp-status.json directly,
+      # or you can bind a second volume and point Settings → export path at it.
+      - ./data:/data
+    environment:
+      - TZ=America/New_York
+      # Optional: pre-set the admin password (otherwise the UI offers a
+      # first-run setup page)
+      #- ADMIN_PASSWORD=change-me
+      # Optional: encrypt stored SNMP credentials at rest with this secret
+      #- SNMPCANVAS_SECRET=a-long-random-string
+      #- POLL_CONCURRENCY=4
+    restart: unless-stopped
+
+# HTTPS: run  ./tools/gen-cert.sh <hostname-or-ip>  once on the host (or drop
+# your own PEM pair at data/certs/server.crt + server.key), then
+# `docker compose restart`. The server switches to HTTPS automatically.
