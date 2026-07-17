@@ -218,7 +218,25 @@ Runtime dependencies: [`net-snmp`](https://www.npmjs.com/package/net-snmp)
 and [`better-sqlite3`](https://www.npmjs.com/package/better-sqlite3). That's
 the complete list, and keeping it that short is a feature.
 
+## Credits
+
+SNMPCanvas stands on two excellent MIT-licensed libraries:
+
+- [**net-snmp**](https://github.com/markabrahams/node-net-snmp) by Mark
+  Abrahams, Stephen Vickers, and contributors — the pure-JavaScript SNMP
+  engine behind every poll, walk, and v3 handshake (its mock-agent support
+  powers `tools/mock-agent.js` too).
+- [**better-sqlite3**](https://github.com/WiseLibs/better-sqlite3) by Joshua
+  Wise and contributors — the synchronous SQLite bindings that keep the
+  storage layer a single dependency, wrapping the public-domain
+  [SQLite](https://sqlite.org) library itself.
+
+The visual language is borrowed from
+[CrossCanvas](https://github.com/RootSwitch/CrossCanvas), SNMPCanvas's
+sister project.
+
 ## License
 
 [The Unlicense](LICENSE) — public domain. Use it, fork it, ship it at work,
-no attribution required.
+no attribution required. Dependencies keep their own (MIT) licenses in
+`node_modules/` when you install or ship an image.
