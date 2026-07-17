@@ -40,10 +40,10 @@ written to a small JSON status file every cycle, for other tools to read.
 
 - **Devices list** - up/down status, CPU, busiest interface, uptime, last
   poll; sortable by any column.
-- **Device page** - CPU / memory / filesystem / temperature cards (when the
-  device exposes them), then every interface with live in/out rates, errors,
-  and discards. A filter box and per-interface Track/Export toggles keep big
-  switches manageable.
+- **Device page** - CPU / memory / filesystem / temperature / fan cards
+  (when the device exposes them), then every interface with live in/out
+  rates, errors, and discards. A filter box and per-interface Track/Export
+  toggles keep big switches manageable.
 - **History graphs** - click any interface or resource card: traffic
   (average + peak), errors/discards, a link-status strip, and dashed
   95th-percentile lines, from 1 hour to 90 days. Charts are hand-drawn SVG
@@ -255,11 +255,14 @@ At add time SNMPCanvas GETs the system group, then walks:
   warning on fast links that only offer 32-bit counters),
 - `hrProcessorLoad` and `hrStorageTable` (HOST-RESOURCES-MIB) - CPU, RAM,
   and fixed disks on Linux, Windows, and many appliances,
-- **temperature sensors** - LM-SENSORS-MIB (lmsensors on Linux/Proxmox;
-  TrueNAS exposes per-drive temps this way), the standard ENTITY-SENSOR-MIB,
-  and vendor health OIDs (Cisco ENVMON, MikroTik). Junk readings
-  (unconnected headers, 0 °C placeholders) and redundant per-core sensors
-  are listed but left untracked by default,
+- **temperature and fan sensors** - LM-SENSORS-MIB (lmsensors on
+  Linux/Proxmox; TrueNAS exposes per-drive temps this way), the standard
+  ENTITY-SENSOR-MIB, vendor health OIDs (Cisco ENVMON, MikroTik), and the
+  ASRock Rack BMC sensor table - IPMI controllers make great SNMP devices
+  in their own right, reading fan tachometers and temperatures straight
+  off the hardware even when the host OS can't. Junk readings (unconnected
+  headers, 0 °C placeholders, "Not Available" rows) and redundant per-core
+  sensors are listed but left untracked by default,
 - the **vendor map** in [`server/oids.js`](server/oids.js), matched by
   `sysObjectID` prefix - vendor CPU/memory OIDs for network devices that
   don't speak HOST-RESOURCES. Cisco (`CISCO-PROCESS-MIB`,

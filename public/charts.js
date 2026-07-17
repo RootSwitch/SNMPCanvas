@@ -15,6 +15,7 @@
         if (v == null || !isFinite(v)) return '—';
         if (unit === 'pct') return v.toFixed(1) + '%';
         if (unit === 'degc') return v.toFixed(1) + ' °C';
+        if (unit === 'rpm') return Math.round(v) + ' rpm';
         if (unit === 'bytes') return fmtSI(v, 1024, ['B', 'KiB', 'MiB', 'GiB', 'TiB']);
         if (unit === 'bps') return fmtSI(v, 1000, ['bps', 'kbps', 'Mbps', 'Gbps', 'Tbps']);
         return fmtSI(v, 1000, ['/s', 'k/s', 'M/s', 'G/s']);

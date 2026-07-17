@@ -56,6 +56,16 @@ const HR = {
 const HR_STORAGE_RAM       = '1.3.6.1.2.1.25.2.1.2';
 const HR_STORAGE_FIXEDDISK = '1.3.6.1.2.1.25.2.1.4';
 
+// --- ASRock Rack BMC sensor table (AMI MegaRAC-based IPMI firmware) ---
+// Named hardware sensors with formatted string readings ("600.00rpm",
+// "32.00&deg;C", "3.30V", "Not Available"). The reading suffix classifies
+// the sensor; fans finally get real tachometers this way, since the BMC
+// owns the sensor bus the host OS can't read.
+const ASROCK_BMC = {
+    nameOid:  '1.3.6.1.4.1.49622.2.1.3',
+    valueOid: '1.3.6.1.4.1.49622.2.1.4'
+};
+
 // --- Temperature sensors ---
 // LM-SENSORS-MIB (net-snmp with lmsensors — Linux hosts, Proxmox, FreeBSD/
 // TrueNAS drive temps). Values are milli-°C in practice.
@@ -129,4 +139,4 @@ function matchVendor(sysObjectID) {
     return best;
 }
 
-module.exports = { SYS, IF, IFX, HR, TEMP, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };
+module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };

@@ -316,8 +316,8 @@
 
     function renderInventory(r) {
         const inv = document.getElementById('inventory');
-        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures' };
-        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [] };
+        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans' };
+        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [], fan: [] };
         for (const e of r.entities) byKind[e.kind]?.push(e);
 
         inv.innerHTML = `
@@ -501,6 +501,15 @@
                 <div class="meter"><i class="${c >= 70 ? 'hot' : ''}" style="width:${Math.min(100, c || 0)}%"></i></div>
             </div>`;
         }
+        if (e.kind === 'fan') {
+            const rpm = v[0];
+            // A tracked fan reading 0 is the alarm case — paint it hot.
+            return `<div class="card" data-eid="${e.id}">
+                <div class="card-title">${esc(e.name)}</div>
+                <div class="card-value">${rpm == null ? '—' : Math.round(rpm) + ' rpm'}</div>
+                <div class="meter"><i class="${rpm === 0 ? 'hot' : ''}" style="width:${rpm === 0 ? 100 : Math.min(100, (rpm || 0) / 80)}%"></i></div>
+            </div>`;
+        }
         if (e.kind === 'cpu') {
             const pct = v[0];
             return `<div class="card" data-eid="${e.id}">
@@ -522,7 +531,7 @@
     // Track/untrack CPU, memory, storage, and temperature sensors after the
     // add-device wizard (interfaces have their own Track column).
     function manageSensorsModal(deviceId, entities) {
-        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures' };
+        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans' };
         const sensors = entities.filter((e) => e.kind !== 'if');
         $modal.innerHTML = `
         <h2>Sensors <span class="muted small">checked = polled &amp; shown</span></h2>
@@ -691,6 +700,14 @@
                 series: [
                     { label: '°C (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
                     { label: '°C (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                ]
+            });
+        } else if (kind === 'fan') {
+            chartBlock(wrap, 'Fan speed', {
+                ...opts, unit: 'rpm',
+                series: [
+                    { label: 'RPM (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
+                    { label: 'RPM (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else {

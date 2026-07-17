@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS credentials (
 CREATE TABLE IF NOT EXISTS entities (
   id           INTEGER PRIMARY KEY,
   device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp')),
+  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan')),
   snmp_index   TEXT NOT NULL,
   name         TEXT,
   alias        TEXT,
@@ -129,18 +129,18 @@ if (!deviceCols.includes('notes')) db.exec('ALTER TABLE devices ADD COLUMN notes
 const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
 if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');
 
-// The kind CHECK constraint gained 'temp'; SQLite can't alter a CHECK, so
-// databases created before it get a one-time table rebuild (ids preserved —
-// samples reference them).
+// The kind CHECK constraint has grown over time ('temp', then 'fan');
+// SQLite can't alter a CHECK, so databases created before the newest kind
+// get a one-time table rebuild (ids preserved — samples reference them).
 const entitySql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entities'").get().sql;
-if (!entitySql.includes("'temp'")) {
+if (!entitySql.includes("'fan'")) {
     db.pragma('foreign_keys = OFF');
     db.transaction(() => {
         db.exec(`
             CREATE TABLE entities_migrate (
               id           INTEGER PRIMARY KEY,
               device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp')),
+              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan')),
               snmp_index   TEXT NOT NULL,
               name         TEXT,
               alias        TEXT,

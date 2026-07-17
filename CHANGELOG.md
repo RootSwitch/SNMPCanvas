@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Fan sensor support** (new `fan` entity kind): RPM cards - a tracked fan
+  at 0 rpm paints its meter red - and history graphs. First source is the
+  **ASRock Rack BMC sensor table** (AMI MegaRAC IPMI firmware), which also
+  feeds temperatures; sensors reading "Not Available" (host powered off,
+  unpopulated headers) are listed but untracked by default.
+- 95th-percentile chart labels no longer overlap when the in/out values
+  nearly coincide.
+
 ## 0.1.0 — 2026-07-17
 
 Initial release.

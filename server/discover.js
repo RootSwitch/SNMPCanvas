@@ -287,6 +287,39 @@ async function probe(target) {
             }
         }
 
+        // 6. ASRock Rack BMC sensor table: named hardware sensors with
+        //    formatted string readings. The suffix classifies each row —
+        //    "...rpm" is a fan, "...&deg;C" a temperature; voltage rails and
+        //    discrete status sensors (0x....) are skipped. "Not Available"
+        //    rows (host off, unpopulated fan headers) classify by name and
+        //    default to untracked.
+        const bmcNames = await walkMap(walkSession, O.ASROCK_BMC.nameOid, warnings, 'ASRock BMC sensors');
+        if (bmcNames.size > 0) {
+            const bmcValues = await walkMap(walkSession, O.ASROCK_BMC.valueOid, warnings, 'ASRock BMC readings');
+            for (const [idx, rawName] of bmcNames) {
+                const name = String(rawName);
+                const reading = String(bmcValues.get(idx) ?? '');
+                let kind = null, available = true;
+                if (/rpm\s*$/i.test(reading)) kind = 'fan';
+                else if (/deg|°/i.test(reading)) kind = 'temp';
+                else if (/not available/i.test(reading)) {
+                    available = false;
+                    if (/fan/i.test(name)) kind = 'fan';
+                    else if (/temp/i.test(name)) kind = 'temp';
+                }
+                if (!kind) continue; // voltages, discrete status sensors
+                const value = available ? parseFloat(reading) : null;
+                entities.push({
+                    kind,
+                    snmpIndex: `ar-${idx}`,
+                    name: `${kind === 'fan' ? 'Fan' : 'Temp'}: ${name}`,
+                    extra: { style: 'asrock-str', valueOid: `${O.ASROCK_BMC.valueOid}.${idx}` },
+                    tracked: available && Number.isFinite(value) &&
+                        (kind === 'fan' ? value >= 0 && value < 30000 : value > 0 && value < 110)
+                });
+            }
+        }
+
         // Answered the system group but exposed no tables at all: almost
         // always a restricted SNMP view, not an SNMPCanvas problem.
         if (entities.length === 0) {

@@ -145,7 +145,7 @@ async function pollDevice(device) {
                 }
             } else if (e.kind === 'cpu') {
                 (extra.oids || []).forEach((oid, n) => { oids[`load${n}`] = oid; });
-            } else if (e.kind === 'temp') {
+            } else if (e.kind === 'temp' || e.kind === 'fan') {
                 oids.value = extra.valueOid;
             } else if (extra.style === 'used-free') {
                 oids.used = extra.usedOid;
@@ -220,7 +220,11 @@ async function pollDevice(device) {
                 if (loads.length > 0) v[0] = loads.reduce((a, b) => a + b, 0) / loads.length;
                 updates.push({ id: e.id, poll_state: null });
             } else if (e.kind === 'temp') {
-                v[0] = tempToC(job.extra, numOrNull(values.get(job.oids.value)));
+                v[0] = tempToC(job.extra, sensorRaw(job.extra, values.get(job.oids.value)));
+                updates.push({ id: e.id, poll_state: null });
+            } else if (e.kind === 'fan') {
+                const rpm = sensorRaw(job.extra, values.get(job.oids.value));
+                v[0] = (rpm != null && rpm >= 0 && rpm < 60000) ? rpm : null;
                 updates.push({ id: e.id, poll_state: null });
             } else if (job.extra.style === 'used-free') {
                 const used = numOrNull(values.get(job.oids.used));
@@ -256,6 +260,17 @@ function numOrNull(x) {
     return Number.isFinite(n) ? n : null;
 }
 
+// BMC-style sensors return formatted strings ("600.00rpm", "32.00&deg;C",
+// "Not Available"); numeric styles pass through as numbers.
+function sensorRaw(extra, value) {
+    if (value == null) return null;
+    if (extra.style === 'asrock-str') {
+        const n = parseFloat(String(value));
+        return Number.isFinite(n) ? n : null;   // "Not Available" -> null
+    }
+    return numOrNull(value);
+}
+
 // Raw sensor reading -> °C by source style; implausible values (unconnected
 // headers, wrapped negatives) become gaps instead of ruining the graph.
 function tempToC(extra, raw) {
@@ -263,6 +278,7 @@ function tempToC(extra, raw) {
     let c;
     if (extra.style === 'lm') c = raw >= 1000 ? raw / 1000 : raw;               // LM-SENSORS milli-°C
     else if (extra.style === 'entity') c = raw * Math.pow(10, (extra.scaleExp || 0) - (extra.precision || 0));
+    else if (extra.style === 'asrock-str') c = raw;                             // already °C after parse
     else c = raw / (extra.div || 1);                                            // vendor scalars/tables
     return (c <= -40 || c >= 150) ? null : c;
 }
