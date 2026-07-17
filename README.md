@@ -134,6 +134,7 @@ atomically to one file (default `/data/snmp-status.json`):
   "interfaces": [
     {
       "id": "core-sw1:eth0",
+      "code": "K7Q2",
       "device": { "name": "core-sw1", "host": "10.0.0.2", "status": "up" },
       "ifIndex": 1,
       "name": "eth0",
@@ -156,6 +157,13 @@ atomically to one file (default `/data/snmp-status.json`):
 Rates are `null` when unknown (first poll after add/reboot, device down);
 metadata is retained while a device is down so a dashboard can grey the tile
 out instead of losing it.
+
+`code` is a short stable key for consumers that don't want to type the full
+`id`: 4+ characters derived from `md5(deviceName:ifName)` (confusable
+characters excluded, lengthened only on hash collision), minted once and
+stored with the interface. It survives un-export/re-export, rediscovery, and
+even deleting and re-adding the device (same device and interface names →
+same code). Each interface's code is shown in the UI on the device page.
 
 Because the export path defaults to `/data/snmp-status.json` and `/data` is a
 bind mount, the file lands **on the docker host** at `./data/snmp-status.json`

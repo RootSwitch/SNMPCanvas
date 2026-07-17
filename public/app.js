@@ -423,7 +423,7 @@
                     <td><input type="checkbox" class="export-cb" data-eid="${e.id}" ${e.export ? 'checked' : ''} ${e.tracked ? '' : 'disabled'}></td>
                     <td><span class="badge ${oper === 'up' ? 'up' : oper === 'down' ? 'down' : ''}">${oper}</span>
                         ${e.stale ? '<span class="badge stale" title="ifIndex may have moved — rediscover this device">stale</span>' : ''}</td>
-                    <td><strong>${esc(e.name)}</strong></td>
+                    <td><strong>${esc(e.name)}</strong>${e.code ? ` <span class="code-chip" title="Short key for snmp-status.json consumers (PingCanvas)">${esc(e.code)}</span>` : ''}</td>
                     <td class="muted hide-sm">${esc(e.alias)}</td>
                     <td class="num">${fmtSpeed(e.speedBps)}</td>
                     <td class="num">${e.tracked ? fmtBps(v[0]) : '—'}</td>
@@ -574,6 +574,7 @@
         <div class="page-head">
             <a href="#/device/${deviceId}" class="muted">← Device</a>
             <h1>${esc(data.name)}</h1>
+            ${data.code ? `<span class="code-chip" title="Short key for snmp-status.json consumers (PingCanvas)">${esc(data.code)}</span>` : ''}
             <span class="sub">${data.bucketSec >= 3600 ? (data.bucketSec / 3600) + 'h' : (data.bucketSec / 60) + 'm'} buckets</span>
             <span class="spacer"></span>
             <div class="range-btns">

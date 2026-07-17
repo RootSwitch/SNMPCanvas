@@ -31,7 +31,7 @@ function scheduleWrite() {
 
 function write() {
     const rows = db.prepare(`
-        SELECT e.id, e.snmp_index, e.name, e.alias, e.speed_bps, e.admin_status, e.oper_status,
+        SELECT e.id, e.snmp_index, e.name, e.alias, e.speed_bps, e.admin_status, e.oper_status, e.code,
                d.name AS device_name, d.host, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id
         WHERE e.export = 1 AND e.kind = 'if'
@@ -43,6 +43,7 @@ function write() {
         const deviceUp = r.device_status === 'up';
         return {
             id: `${r.device_name}:${r.name}`,
+            code: r.code,
             device: { name: r.device_name, host: r.host, status: r.device_status },
             ifIndex: Number(r.snmp_index),
             name: r.name,

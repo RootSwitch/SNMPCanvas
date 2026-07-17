@@ -93,9 +93,59 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `);
 
+// --- interface short codes ---
+// A compact, human-typeable key for external consumers (snmp-status.json /
+// PingCanvas): derived from md5("deviceName:ifName") so a re-added device
+// regenerates the same codes, persisted on the entity so nothing that
+// happens later (un-export, rediscover, rename) can change one, and
+// collision-checked at mint time (the newcomer gets a longer form).
+// Alphabet drops 0/O and 1/I lookalikes.
+const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+function codeCandidates(deviceName, ifName) {
+    const digest = crypto.createHash('md5').update(`${deviceName}:${ifName}`).digest('hex');
+    let n = BigInt('0x' + digest);
+    let b32 = '';
+    while (n > 0n) { b32 = CODE_ALPHABET[Number(n % 32n)] + b32; n /= 32n; }
+    const out = [];
+    for (let len = 4; len <= b32.length; len++) {
+        for (let start = 0; start + len <= b32.length && start < 8; start++) out.push(b32.slice(start, start + len));
+    }
+    return out;
+}
+
+function generateIfCode(deviceName, ifName, taken) {
+    for (const c of codeCandidates(deviceName, ifName)) {
+        if (taken ? !taken.has(c) : !db.prepare('SELECT 1 FROM entities WHERE code = ?').get(c)) return c;
+    }
+    return crypto.randomBytes(4).toString('hex').toUpperCase(); // unreachable in practice
+}
+
 // --- lightweight migrations for databases created by earlier versions ---
 const deviceCols = db.prepare('PRAGMA table_info(devices)').all().map((c) => c.name);
 if (!deviceCols.includes('notes')) db.exec('ALTER TABLE devices ADD COLUMN notes TEXT');
+
+const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
+if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_code ON entities(code) WHERE code IS NOT NULL');
+
+// Backfill codes for interfaces created before the column existed.
+{
+    const missing = db.prepare(`SELECT e.id, e.name AS if_name, d.name AS device_name
+                                FROM entities e JOIN devices d ON d.id = e.device_id
+                                WHERE e.kind = 'if' AND e.code IS NULL ORDER BY e.id`).all();
+    if (missing.length > 0) {
+        const taken = new Set(db.prepare('SELECT code FROM entities WHERE code IS NOT NULL').all().map((r) => r.code));
+        const upd = db.prepare('UPDATE entities SET code = ? WHERE id = ?');
+        db.transaction(() => {
+            for (const m of missing) {
+                const code = generateIfCode(m.device_name, m.if_name, taken);
+                taken.add(code);
+                upd.run(code, m.id);
+            }
+        })();
+    }
+}
 
 // --- settings ---
 const getSettingStmt = db.prepare('SELECT value FROM settings WHERE key = ?');
@@ -168,4 +218,4 @@ function loadCredentials(deviceId) {
     return row;
 }
 
-module.exports = { db, DATA_DIR, getSetting, setSetting, saveCredentials, loadCredentials };
+module.exports = { db, DATA_DIR, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode };

@@ -7,7 +7,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { db, getSetting, setSetting, saveCredentials, loadCredentials, DATA_DIR } = require('./db');
+const { db, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode, DATA_DIR } = require('./db');
 const auth = require('./auth');
 const discover = require('./discover');
 const poller = require('./poller');
@@ -62,7 +62,7 @@ function deviceSummary(d) {
 function entitySummary(e, latest) {
     const extra = e.extra ? JSON.parse(e.extra) : {};
     return {
-        id: e.id, kind: e.kind, snmpIndex: e.snmp_index, name: e.name, alias: e.alias || '',
+        id: e.id, kind: e.kind, snmpIndex: e.snmp_index, name: e.name, alias: e.alias || '', code: e.code || null,
         speedBps: e.speed_bps, tracked: !!e.tracked, export: !!e.export, stale: !!e.stale,
         adminStatus: e.admin_status, operStatus: e.oper_status,
         hc: extra.hc !== undefined ? !!extra.hc : undefined,
@@ -192,12 +192,13 @@ const routes = [
                      Math.floor(Date.now() / 1000));
             const id = info.lastInsertRowid;
             saveCredentials(id, target.creds);
-            const ins = db.prepare(`INSERT INTO entities (device_id, kind, snmp_index, name, alias, speed_bps, extra, tracked, admin_status, oper_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+            const ins = db.prepare(`INSERT INTO entities (device_id, kind, snmp_index, name, alias, speed_bps, extra, tracked, admin_status, oper_status, code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
             for (const e of result.entities) {
                 const tracked = chosen.has(`${e.kind}:${e.snmpIndex}`) ? chosen.get(`${e.kind}:${e.snmpIndex}`) : e.tracked;
+                const code = e.kind === 'if' ? generateIfCode(name, e.name) : null;
                 ins.run(id, e.kind, String(e.snmpIndex), e.name, e.alias || null, e.speedBps || null,
-                        JSON.stringify(e.extra || {}), tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null);
+                        JSON.stringify(e.extra || {}), tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null, code);
             }
             return id;
         })();
@@ -269,16 +270,17 @@ const routes = [
             const existing = db.prepare('SELECT * FROM entities WHERE device_id = ?').all(d.id);
             const byKey = new Map(existing.map((e) => [`${e.kind}:${e.snmp_index}`, e]));
             const seen = new Set();
-            const ins = db.prepare(`INSERT INTO entities (device_id, kind, snmp_index, name, alias, speed_bps, extra, tracked, admin_status, oper_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+            const ins = db.prepare(`INSERT INTO entities (device_id, kind, snmp_index, name, alias, speed_bps, extra, tracked, admin_status, oper_status, code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
             const upd = db.prepare('UPDATE entities SET name = ?, alias = ?, speed_bps = ?, extra = ?, stale = 0, admin_status = ?, oper_status = ? WHERE id = ?');
             for (const e of result.entities) {
                 const key = `${e.kind}:${e.snmpIndex}`;
                 seen.add(key);
                 const cur = byKey.get(key);
                 if (!cur) {
+                    const code = e.kind === 'if' ? generateIfCode(d.name, e.name) : null;
                     ins.run(d.id, e.kind, String(e.snmpIndex), e.name, e.alias || null, e.speedBps || null,
-                            JSON.stringify(e.extra || {}), e.tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null);
+                            JSON.stringify(e.extra || {}), e.tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null, code);
                     summary.added.push(`${e.kind} ${e.name}`);
                 } else {
                     if (cur.name !== e.name) summary.updated.push(`${cur.name} → ${e.name}`);
@@ -341,7 +343,7 @@ const routes = [
             p95 = { in: pct('v0'), out: pct('v1') };
         }
         ok(res, {
-            kind: e.kind, name: e.name, speedBps: e.speed_bps, bucketSec: bucket, from, to, p95,
+            kind: e.kind, name: e.name, code: e.code || null, speedBps: e.speed_bps, bucketSec: bucket, from, to, p95,
             points: rows.map((r) => [r.t, r.a0, r.m0, r.a1, r.m1, r.a2, r.a3, r.a4, r.a5, r.st])
         });
     } },

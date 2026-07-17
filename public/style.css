@@ -270,6 +270,19 @@ table.list th.num { text-align: right; }
 .badge.down { color: var(--se-down); border-color: var(--se-down); }
 .badge.stale { color: #d9a92f; border-color: #d9a92f; }
 
+/* Short interface key (snmp-status.json `code`) */
+.code-chip {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px;
+    color: var(--se-txt-dim);
+    background: var(--se-input);
+    border: 1px solid var(--se-border);
+    border-radius: 4px;
+    padding: 0 5px;
+    letter-spacing: 0.5px;
+    cursor: default;
+}
+
 /* ===== Resource cards (CPU / memory / filesystems) ===== */
 .cards {
     display: grid;
