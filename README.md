@@ -58,7 +58,7 @@ services:
     ports: ["9161:9161"]
     volumes: ["./data:/data:z"]   # :z = SELinux label; no-op elsewhere
     environment:
-      - TZ=America/New_York
+      - TZ=Etc/UTC                # your timezone: prune schedule + log stamps
     restart: unless-stopped
 ```
 
@@ -110,7 +110,7 @@ services:
     volumes:
       - /projects/noc-data:/data:z   # replaces ./data (same container path)
     environment:
-      - TZ=America/New_York
+      - TZ=America/Chicago
 ```
 
 ### Updating an existing install

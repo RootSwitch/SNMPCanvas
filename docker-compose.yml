@@ -17,7 +17,8 @@ services:
       # it's a no-op elsewhere.
       - ./data:/data:z
     environment:
-      - TZ=America/New_York
+      # Timezone governs the nightly prune schedule and log timestamps
+      - TZ=Etc/UTC
       # Optional: pre-set the admin password (otherwise the UI offers a
       # first-run setup page)
       #- ADMIN_PASSWORD=change-me

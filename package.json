@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Lightweight self-hosted SNMP monitoring: poll SNMPv2c/v3 devices, store history in SQLite, view it in a dependency-free web UI.",
   "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RootSwitch/SNMPCanvas.git"
+  },
+  "homepage": "https://github.com/RootSwitch/SNMPCanvas",
+  "bugs": {
+    "url": "https://github.com/RootSwitch/SNMPCanvas/issues"
+  },
   "type": "commonjs",
   "main": "server/server.js",
   "scripts": {
