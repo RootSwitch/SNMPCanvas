@@ -96,6 +96,37 @@ then show TLS record-length errors when you try https): the pair isn't at
 `docker compose logs snmpcanvas | grep -i tls` names the problem, and
 `sudo chown -R 1000:1000 <data>/certs` fixes the second.
 
+### Customizing the deployment
+
+Put host-specific settings (different volume paths, environment variables,
+ports) in a `docker-compose.override.yml` next to the compose file — Docker
+Compose merges it automatically, and it's gitignored so updates never
+conflict with your edits:
+
+```yaml
+# docker-compose.override.yml (example)
+services:
+  snmpcanvas:
+    volumes:
+      - /projects/noc-data:/data:z   # replaces ./data (same container path)
+    environment:
+      - TZ=America/New_York
+```
+
+### Updating an existing install
+
+```
+git pull                          # from your origin (GitHub, or a refreshed
+                                  # git bundle at the path you cloned from)
+sudo docker compose up -d --build
+```
+
+`up -d --build` rebuilds the image and recreates the container only when
+something changed; the data directory is a bind mount, so devices, history,
+and settings survive every update (schema migrations run automatically on
+first boot). Old image layers accumulate over time — an occasional
+`sudo docker image prune -f` tidies them.
+
 ### Running without Docker
 
 Node 20+: `npm install && npm start` (listens on `:9161`, data in `./data`).
