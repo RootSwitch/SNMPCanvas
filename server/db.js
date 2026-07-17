@@ -99,7 +99,7 @@ const setSettingStmt = db.prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
 
 const DEFAULTS = {
-    poll_interval_s: '300',
+    poll_interval_s: '30',
     retention_days: '90',
     export_path: path.join(DATA_DIR, 'snmp-status.json')
 };

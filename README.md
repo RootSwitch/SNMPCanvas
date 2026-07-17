@@ -39,9 +39,11 @@ switches.
 - **Interface export** — check the **Export** box on any interface and its
   latest stats are written to `snmp-status.json` after every poll (atomic
   write), for external dashboards to ingest. Schema below.
-- **Lazy by design** — global polling interval (default 5 minutes,
+- **Tunable data volume** — global polling interval (default 30 seconds,
   per-device override) and a global retention window (default 90 days,
-  pruned nightly) keep the database small.
+  pruned nightly). Longer intervals and shorter retention keep the
+  database small; at the 30 s default expect roughly 2,900 samples per
+  tracked entity per day.
 - **Single shared password** for the UI (scrypt-hashed), session cookie,
   login rate limiting.
 - **9 themes** carried over from CrossCanvas's palette family.
