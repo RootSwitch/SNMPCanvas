@@ -56,6 +56,20 @@ const HR = {
 const HR_STORAGE_RAM       = '1.3.6.1.2.1.25.2.1.2';
 const HR_STORAGE_FIXEDDISK = '1.3.6.1.2.1.25.2.1.4';
 
+// --- Temperature sensors ---
+// LM-SENSORS-MIB (net-snmp with lmsensors — Linux hosts, Proxmox, FreeBSD/
+// TrueNAS drive temps). Values are milli-°C in practice.
+const TEMP = {
+    lmTempDevice: '1.3.6.1.4.1.2021.13.16.2.1.2',
+    lmTempValue:  '1.3.6.1.4.1.2021.13.16.2.1.3',
+    // ENTITY-SENSOR-MIB (RFC 3433) — standard sensor table on network gear.
+    entSensorType:      '1.3.6.1.2.1.99.1.1.1.1',   // 8 = celsius
+    entSensorScale:     '1.3.6.1.2.1.99.1.1.1.2',   // enum: 9=units, 8=milli...
+    entSensorPrecision: '1.3.6.1.2.1.99.1.1.1.3',
+    entSensorValue:     '1.3.6.1.2.1.99.1.1.1.4',
+    entPhysicalName:    '1.3.6.1.2.1.47.1.1.1.1.7'
+};
+
 // --- Vendor CPU/memory map, matched by longest dotted prefix of the
 // device's sysObjectID. `style` is interpreted by discover.js/poller.js:
 //   cpu 'walk-gauge-pct'   walk `oid`; each row is a 0-100 gauge; rows averaged
@@ -76,6 +90,26 @@ const VENDORS = [
             nameOid: '1.3.6.1.4.1.9.9.48.1.1.1.2',      // ciscoMemoryPoolName
             usedOid: '1.3.6.1.4.1.9.9.48.1.1.1.5',      // ciscoMemoryPoolUsed
             freeOid: '1.3.6.1.4.1.9.9.48.1.1.1.6'       // ciscoMemoryPoolFree
+        },
+        temp: {   // CISCO-ENVMON-MIB (already °C)
+            style: 'walk-descr-value',
+            descrOid: '1.3.6.1.4.1.9.9.13.1.3.1.2',     // ciscoEnvMonTemperatureDescr
+            valueOid: '1.3.6.1.4.1.9.9.13.1.3.1.3',     // ciscoEnvMonTemperatureValue
+            div: 1
+        }
+    },
+    {
+        key: 'mikrotik',
+        label: 'MikroTik RouterOS',
+        prefix: '1.3.6.1.4.1.14988.',
+        // CPU/memory come from HOST-RESOURCES; only health sensors are
+        // vendor-specific. Values in tenths of °C; not all models have them.
+        temp: {
+            style: 'scalars',
+            sensors: [
+                { name: 'Board temperature', oid: '1.3.6.1.4.1.14988.1.1.3.10.0', div: 10 },
+                { name: 'CPU temperature', oid: '1.3.6.1.4.1.14988.1.1.3.11.0', div: 10 }
+            ]
         }
     }
     // Extension examples (untested, contributions welcome):
@@ -95,4 +129,4 @@ function matchVendor(sysObjectID) {
     return best;
 }
 
-module.exports = { SYS, IF, IFX, HR, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };
+module.exports = { SYS, IF, IFX, HR, TEMP, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };

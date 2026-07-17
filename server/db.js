@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS credentials (
 CREATE TABLE IF NOT EXISTS entities (
   id           INTEGER PRIMARY KEY,
   device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs')),
+  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp')),
   snmp_index   TEXT NOT NULL,
   name         TEXT,
   alias        TEXT,
@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS entities (
   oper_status  INTEGER,
   stale        INTEGER NOT NULL DEFAULT 0,
   poll_state   TEXT,
+  code         TEXT,
   UNIQUE (device_id, kind, snmp_index)
 );
 CREATE INDEX IF NOT EXISTS idx_entities_export ON entities(export) WHERE export = 1;
@@ -127,6 +128,45 @@ if (!deviceCols.includes('notes')) db.exec('ALTER TABLE devices ADD COLUMN notes
 
 const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
 if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');
+
+// The kind CHECK constraint gained 'temp'; SQLite can't alter a CHECK, so
+// databases created before it get a one-time table rebuild (ids preserved —
+// samples reference them).
+const entitySql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entities'").get().sql;
+if (!entitySql.includes("'temp'")) {
+    db.pragma('foreign_keys = OFF');
+    db.transaction(() => {
+        db.exec(`
+            CREATE TABLE entities_migrate (
+              id           INTEGER PRIMARY KEY,
+              device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp')),
+              snmp_index   TEXT NOT NULL,
+              name         TEXT,
+              alias        TEXT,
+              speed_bps    INTEGER,
+              extra        TEXT,
+              tracked      INTEGER NOT NULL DEFAULT 1,
+              export       INTEGER NOT NULL DEFAULT 0,
+              admin_status INTEGER,
+              oper_status  INTEGER,
+              stale        INTEGER NOT NULL DEFAULT 0,
+              poll_state   TEXT,
+              code         TEXT,
+              UNIQUE (device_id, kind, snmp_index)
+            );
+            INSERT INTO entities_migrate (id, device_id, kind, snmp_index, name, alias, speed_bps, extra,
+                                          tracked, export, admin_status, oper_status, stale, poll_state, code)
+              SELECT id, device_id, kind, snmp_index, name, alias, speed_bps, extra,
+                     tracked, export, admin_status, oper_status, stale, poll_state, code FROM entities;
+            DROP TABLE entities;
+            ALTER TABLE entities_migrate RENAME TO entities;
+        `);
+    })();
+    db.pragma('foreign_keys = ON');
+}
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_entities_export ON entities(export) WHERE export = 1');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_code ON entities(code) WHERE code IS NOT NULL');
 
 // Backfill codes for interfaces created before the column existed.

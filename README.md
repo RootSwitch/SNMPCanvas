@@ -22,9 +22,9 @@ switches.
 ## Features
 
 - **Devices list** — up/down status (SNMP reachability), uptime, last poll.
-- **Device page** — CPU / memory / filesystem cards (when the device exposes
-  them), then every tracked interface with live in/out rates, errors, and
-  discards.
+- **Device page** — CPU / memory / filesystem / temperature cards (when the
+  device exposes them), then every tracked interface with live in/out rates,
+  errors, and discards.
 - **History graphs** — click any interface or resource card: traffic
   (avg + max), errors/discards, and a link-status strip, from 1 hour to 90
   days, rendered as hand-rolled SVG that follows the app theme.
@@ -191,6 +191,11 @@ At add time SNMPCanvas GETs the system group, then walks:
   warning on fast links that only offer 32-bit counters),
 - `hrProcessorLoad` and `hrStorageTable` (HOST-RESOURCES-MIB) — CPU, RAM,
   and fixed disks on Linux/Windows/appliances,
+- **temperature sensors** — LM-SENSORS-MIB (lmsensors on Linux/Proxmox;
+  TrueNAS exposes per-drive temps this way), the standard ENTITY-SENSOR-MIB,
+  and vendor health OIDs (Cisco ENVMON, MikroTik). lmsensors junk readings
+  (unconnected headers, 0 °C placeholders) and redundant per-core sensors are
+  listed but untracked by default,
 - the **vendor map** in [`server/oids.js`](server/oids.js), matched by
   `sysObjectID` prefix — vendor CPU/memory OIDs for network devices that
   don't speak HOST-RESOURCES. Cisco (`CISCO-PROCESS-MIB`,

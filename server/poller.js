@@ -145,6 +145,8 @@ async function pollDevice(device) {
                 }
             } else if (e.kind === 'cpu') {
                 (extra.oids || []).forEach((oid, n) => { oids[`load${n}`] = oid; });
+            } else if (e.kind === 'temp') {
+                oids.value = extra.valueOid;
             } else if (extra.style === 'used-free') {
                 oids.used = extra.usedOid;
                 oids.free = extra.freeOid;
@@ -217,6 +219,9 @@ async function pollDevice(device) {
                 const loads = Object.keys(job.oids).map((k) => numOrNull(values.get(job.oids[k]))).filter((x) => x != null);
                 if (loads.length > 0) v[0] = loads.reduce((a, b) => a + b, 0) / loads.length;
                 updates.push({ id: e.id, poll_state: null });
+            } else if (e.kind === 'temp') {
+                v[0] = tempToC(job.extra, numOrNull(values.get(job.oids.value)));
+                updates.push({ id: e.id, poll_state: null });
             } else if (job.extra.style === 'used-free') {
                 const used = numOrNull(values.get(job.oids.used));
                 const free = numOrNull(values.get(job.oids.free));
@@ -249,6 +254,17 @@ function numOrNull(x) {
     if (x == null) return null;
     const n = Number(x);
     return Number.isFinite(n) ? n : null;
+}
+
+// Raw sensor reading -> °C by source style; implausible values (unconnected
+// headers, wrapped negatives) become gaps instead of ruining the graph.
+function tempToC(extra, raw) {
+    if (raw == null) return null;
+    let c;
+    if (extra.style === 'lm') c = raw >= 1000 ? raw / 1000 : raw;               // LM-SENSORS milli-°C
+    else if (extra.style === 'entity') c = raw * Math.pow(10, (extra.scaleExp || 0) - (extra.precision || 0));
+    else c = raw / (extra.div || 1);                                            // vendor scalars/tables
+    return (c <= -40 || c >= 150) ? null : c;
 }
 
 // Counter delta -> per-second rate. cur/prev are decimal strings (BigInt-safe).

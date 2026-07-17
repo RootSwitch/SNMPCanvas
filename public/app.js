@@ -316,8 +316,8 @@
 
     function renderInventory(r) {
         const inv = document.getElementById('inventory');
-        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage' };
-        const byKind = { if: [], cpu: [], mem: [], fs: [] };
+        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures' };
+        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [] };
         for (const e of r.entities) byKind[e.kind]?.push(e);
 
         inv.innerHTML = `
@@ -397,6 +397,7 @@
                 · up ${fmtUptime(d.uptimeSeconds)} · polled ${fmtAgo(d.lastPollTs)} every ${d.effectiveIntervalS}s</span>
             <span class="spacer"></span>
             <button id="dev-edit">Edit</button>
+            ${data.entities.some((e) => e.kind !== 'if') ? '<button id="dev-sensors">Sensors</button>' : ''}
             <button id="dev-rediscover">Rediscover</button>
         </div>
         ${d.sysDescr ? `<div class="muted small" style="margin:-8px 0 12px">${esc(d.sysDescr.slice(0, 220))}</div>` : ''}
@@ -473,6 +474,8 @@
             });
         }
         document.getElementById('dev-edit').addEventListener('click', () => editDeviceModal(d));
+        const sensorsBtn = document.getElementById('dev-sensors');
+        if (sensorsBtn) sensorsBtn.addEventListener('click', () => manageSensorsModal(id, data.entities));
         document.getElementById('dev-rediscover').addEventListener('click', async (ev) => {
             ev.target.disabled = true; ev.target.textContent = 'Rediscovering…';
             try {
@@ -490,6 +493,14 @@
 
     function resourceCard(e) {
         const v = e.latest ? e.latest.v : [];
+        if (e.kind === 'temp') {
+            const c = v[0];
+            return `<div class="card" data-eid="${e.id}">
+                <div class="card-title">${esc(e.name)}</div>
+                <div class="card-value">${c == null ? '—' : c.toFixed(1) + '°C'}</div>
+                <div class="meter"><i class="${c >= 70 ? 'hot' : ''}" style="width:${Math.min(100, c || 0)}%"></i></div>
+            </div>`;
+        }
         if (e.kind === 'cpu') {
             const pct = v[0];
             return `<div class="card" data-eid="${e.id}">
@@ -506,6 +517,46 @@
             <div class="card-sub">${fmtBytes(used)} of ${fmtBytes(total)}</div>
             <div class="meter"><i class="${pct > 90 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
         </div>`;
+    }
+
+    // Track/untrack CPU, memory, storage, and temperature sensors after the
+    // add-device wizard (interfaces have their own Track column).
+    function manageSensorsModal(deviceId, entities) {
+        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures' };
+        const sensors = entities.filter((e) => e.kind !== 'if');
+        $modal.innerHTML = `
+        <h2>Sensors <span class="muted small">checked = polled &amp; shown</span></h2>
+        ${Object.entries(kinds).map(([kind, label]) => {
+            const list = sensors.filter((e) => e.kind === kind);
+            return list.length === 0 ? '' : `
+            <div class="inv-group"><h4>${label} (${list.length})</h4>
+            <div class="inv-scroll">
+            ${list.map((e) => `
+                <label class="inv-row">
+                    <input type="checkbox" data-eid="${e.id}" data-was="${e.tracked ? 1 : 0}" ${e.tracked ? 'checked' : ''}>
+                    <span class="grow">${esc(e.name)}</span>
+                    ${e.latest && e.latest.v[0] != null && kind === 'temp' ? `<span class="muted small">${e.latest.v[0].toFixed(1)}°C</span>` : ''}
+                </label>`).join('')}
+            </div></div>`;
+        }).join('')}
+        <div class="form-actions">
+            <button class="btn-primary" id="ms-save">Save</button>
+            <button id="ms-cancel">Cancel</button>
+            <span class="error-text" id="ms-err"></span>
+        </div>`;
+        $modal.showModal();
+        document.getElementById('ms-cancel').addEventListener('click', () => $modal.close());
+        document.getElementById('ms-save').addEventListener('click', async () => {
+            try {
+                for (const cb of $modal.querySelectorAll('input[data-eid]')) {
+                    if (cb.checked !== (cb.dataset.was === '1')) {
+                        await api('PATCH', `/api/entities/${cb.dataset.eid}`, { tracked: cb.checked });
+                    }
+                }
+                $modal.close();
+                renderDevice(deviceId);
+            } catch (e) { document.getElementById('ms-err').textContent = e.message; }
+        });
     }
 
     function editDeviceModal(d) {
@@ -633,6 +684,14 @@
             chartBlock(wrap, 'CPU load', {
                 ...opts, unit: 'pct', yMax: 100,
                 series: [{ label: 'Load %', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) }]
+            });
+        } else if (kind === 'temp') {
+            chartBlock(wrap, 'Temperature', {
+                ...opts, unit: 'degc',
+                series: [
+                    { label: '°C (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
+                    { label: '°C (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                ]
             });
         } else {
             chartBlock(wrap, kind === 'mem' ? 'Memory' : 'Storage', {

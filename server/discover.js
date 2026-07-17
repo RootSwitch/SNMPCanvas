@@ -217,6 +217,76 @@ async function probe(target) {
             }
         }
 
+        // 5. Temperature sensors: vendor health OIDs, LM-SENSORS-MIB
+        //    (lmsensors on Linux/Proxmox, drive temps on TrueNAS), and the
+        //    standard ENTITY-SENSOR-MIB. lmsensors exposes plenty of junk
+        //    (unconnected headers reading 0 or wrapped negatives), so
+        //    implausible readings default to untracked rather than hidden.
+        const plausibleC = (c) => c != null && c > 0 && c < 110;
+
+        if (vendor && vendor.temp) {
+            if (vendor.temp.style === 'scalars') {
+                const got = await S.get(session, vendor.temp.sensors.map((t) => t.oid));
+                for (const t of vendor.temp.sensors) {
+                    const raw = got.get(t.oid);
+                    if (raw == null) continue;
+                    entities.push({
+                        kind: 'temp', snmpIndex: `v-${t.oid.split('.').slice(-2).join('.')}`, name: `Temp: ${t.name}`,
+                        extra: { style: 'div', valueOid: t.oid, div: t.div || 1 },
+                        tracked: plausibleC(Number(raw) / (t.div || 1))
+                    });
+                }
+            } else if (vendor.temp.style === 'walk-descr-value') {
+                const names = await walkMap(walkSession, vendor.temp.descrOid, warnings, `${vendor.key} temperatures`);
+                for (const [idx, name] of names) {
+                    entities.push({
+                        kind: 'temp', snmpIndex: `v-${idx}`, name: `Temp: ${String(name)}`,
+                        extra: { style: 'div', valueOid: `${vendor.temp.valueOid}.${idx}`, div: vendor.temp.div || 1 },
+                        tracked: true
+                    });
+                }
+            }
+        }
+
+        const lmNames = await walkMap(walkSession, O.TEMP.lmTempDevice, warnings, 'lmsensors temperatures');
+        if (lmNames.size > 0) {
+            const lmValues = await walkMap(walkSession, O.TEMP.lmTempValue, warnings, 'lmsensors values');
+            // When a CPU package sensor exists, the per-core clones are
+            // redundant — list them, but untracked by default.
+            const hasPackage = [...lmNames.values()].some((n) => /^Package id/i.test(String(n)));
+            for (const [idx, name] of lmNames) {
+                const raw = Number(lmValues.get(idx));
+                const c = Number.isFinite(raw) ? (raw >= 1000 ? raw / 1000 : raw) : null;
+                const coreDup = hasPackage && /^Core \d+$/i.test(String(name));
+                entities.push({
+                    kind: 'temp', snmpIndex: `lm-${idx}`, name: `Temp: ${String(name)}`,
+                    extra: { style: 'lm', valueOid: `${O.TEMP.lmTempValue}.${idx}` },
+                    tracked: plausibleC(c) && !coreDup
+                });
+            }
+        }
+
+        const entTypes = await walkMap(walkSession, O.TEMP.entSensorType, warnings, 'entity sensors');
+        const celsius = [...entTypes].filter(([, t]) => Number(t) === 8).map(([i]) => i);
+        if (celsius.length > 0) {
+            const entScale = await walkMap(walkSession, O.TEMP.entSensorScale, warnings, 'entity sensor scale');
+            const entPrec = await walkMap(walkSession, O.TEMP.entSensorPrecision, warnings, 'entity sensor precision');
+            const entValue = await walkMap(walkSession, O.TEMP.entSensorValue, warnings, 'entity sensor values');
+            const entNames = await walkMap(walkSession, O.TEMP.entPhysicalName, warnings, 'entity names');
+            for (const idx of celsius) {
+                const scaleExp = (Number(entScale.get(idx) ?? 9) - 9) * 3;   // enum 9 = units
+                const precision = Number(entPrec.get(idx) ?? 0);
+                const raw = Number(entValue.get(idx));
+                const c = Number.isFinite(raw) ? raw * Math.pow(10, scaleExp - precision) : null;
+                entities.push({
+                    kind: 'temp', snmpIndex: `ent-${idx}`,
+                    name: `Temp: ${String(entNames.get(idx) ?? `sensor ${idx}`)}`,
+                    extra: { style: 'entity', valueOid: `${O.TEMP.entSensorValue}.${idx}`, scaleExp, precision },
+                    tracked: plausibleC(c)
+                });
+            }
+        }
+
         // Answered the system group but exposed no tables at all: almost
         // always a restricted SNMP view, not an SNMPCanvas problem.
         if (entities.length === 0) {
