@@ -99,6 +99,7 @@
 
     async function route() {
         setAutoRefresh(null);
+        ifFilter = ''; // filter is per-visit; auto-refresh re-renders keep it, navigation clears it
         const session = await GET('/api/session');
         if (!session.authenticated) { renderLogin(session.needsSetup); return; }
 
@@ -148,9 +149,28 @@
     }
 
     // ===== devices list =====
+    // Sort state survives the 30s auto-refresh (module scope, not persisted).
+    let deviceSort = { key: 'name', dir: 1 };
+    const SORT_VALUE = {
+        status: (d) => d.status + (d.enabled ? '' : 'z'),
+        name: (d) => d.name.toLowerCase(),
+        host: (d) => d.host,
+        cpu: (d) => d.cpuPct ?? -1,
+        topbw: (d) => (d.topIf && d.topIf.bps != null) ? d.topIf.bps : -1,
+        ifcount: (d) => d.interfaceCount,
+        uptime: (d) => d.uptimeSeconds ?? -1,
+        lastpoll: (d) => d.lastPollTs ?? 0
+    };
+
     async function renderDevices() {
         setNav('devices', true);
         const { devices } = await GET('/api/devices');
+        const val = SORT_VALUE[deviceSort.key] || SORT_VALUE.name;
+        devices.sort((a, b) => {
+            const x = val(a), y = val(b);
+            return (x < y ? -1 : x > y ? 1 : 0) * deviceSort.dir;
+        });
+        const arrow = (key) => deviceSort.key === key ? (deviceSort.dir === 1 ? ' ▲' : ' ▼') : '';
         $main.innerHTML = `
         <div class="page-head">
             <h1>Devices</h1>
@@ -161,9 +181,15 @@
         <div class="panel">
         ${devices.length === 0 ? '<div class="muted">No devices yet — click <strong>Add device</strong> to poll your first one.</div>' : `
         <table class="list"><thead><tr>
-            <th>Status</th><th>Name</th><th>Address</th>
-            <th class="num">CPU</th><th>Top interface</th><th class="num">Top usage</th>
-            <th class="num hide-sm">Interfaces</th><th class="num">Uptime</th><th class="num hide-sm">Last poll</th>
+            <th class="sortable" data-sort="status">Status${arrow('status')}</th>
+            <th class="sortable" data-sort="name">Name${arrow('name')}</th>
+            <th class="sortable" data-sort="host">Address${arrow('host')}</th>
+            <th class="num sortable" data-sort="cpu">CPU${arrow('cpu')}</th>
+            <th>Top interface</th>
+            <th class="num sortable" data-sort="topbw">Top usage${arrow('topbw')}</th>
+            <th class="num hide-sm sortable" data-sort="ifcount">Interfaces${arrow('ifcount')}</th>
+            <th class="num sortable" data-sort="uptime">Uptime${arrow('uptime')}</th>
+            <th class="num hide-sm sortable" data-sort="lastpoll">Last poll${arrow('lastpoll')}</th>
         </tr></thead><tbody>
         ${devices.map((d) => {
             const stale = d.status !== 'up';
@@ -190,6 +216,13 @@
         document.getElementById('add-btn').addEventListener('click', addDeviceWizard);
         for (const tr of $main.querySelectorAll('tr.rowlink')) {
             tr.addEventListener('click', () => { location.hash = `#/device/${tr.dataset.id}`; });
+        }
+        for (const th of $main.querySelectorAll('th.sortable')) {
+            th.addEventListener('click', () => {
+                const key = th.dataset.sort;
+                deviceSort = { key, dir: deviceSort.key === key ? -deviceSort.dir : 1 };
+                renderDevices();
+            });
         }
         setAutoRefresh(() => { if (location.hash === '' || location.hash === '#/devices') renderDevices(); }, 30000);
     }
@@ -337,6 +370,8 @@
     }
 
     // ===== device details =====
+    let ifFilter = ''; // interface filter text, kept across auto-refresh
+
     async function renderDevice(id) {
         setNav('devices', true);
         let data;
@@ -365,9 +400,14 @@
             <button id="dev-rediscover">Rediscover</button>
         </div>
         ${d.sysDescr ? `<div class="muted small" style="margin:-8px 0 12px">${esc(d.sysDescr.slice(0, 220))}</div>` : ''}
+        ${d.notes ? `<div class="notes-block">${esc(d.notes)}</div>` : ''}
         ${cards.length ? `<div class="cards">${cards.map(resourceCard).join('')}</div>` : ''}
         <div class="panel">
-            <h2>Interfaces <span class="muted small">(${trackedCount} tracked${allIfs.length - trackedCount ? `, ${allIfs.length - trackedCount} untracked` : ''})</span></h2>
+            <h2 style="display:flex;align-items:center;gap:10px">Interfaces
+                <span class="muted small">(${trackedCount} tracked${allIfs.length - trackedCount ? `, ${allIfs.length - trackedCount} untracked` : ''})</span>
+                <span style="flex:1"></span>
+                ${allIfs.length > 8 ? '<input type="text" id="if-filter" placeholder="filter name / alias" style="font-weight:400;width:190px">' : ''}
+            </h2>
             ${ifs.length === 0 ? '<div class="muted">No interfaces discovered.</div>' : `
             <table class="list"><thead><tr>
                 <th title="Poll and graph this interface">Track</th>
@@ -378,7 +418,7 @@
             ${ifs.map((e) => {
                 const v = e.latest && e.tracked ? e.latest.v : [];
                 const oper = OPER[e.operStatus] || 'unknown';
-                return `<tr class="${e.tracked ? 'rowlink' : ''}" data-eid="${e.id}" ${e.tracked ? '' : 'style="opacity:0.55"'}>
+                return `<tr class="${e.tracked ? 'rowlink' : ''}" data-eid="${e.id}" data-search="${esc((e.name + ' ' + e.alias).toLowerCase())}" ${e.tracked ? '' : 'style="opacity:0.55"'}>
                     <td><input type="checkbox" class="tracked-cb" data-eid="${e.id}" ${e.tracked ? 'checked' : ''}></td>
                     <td><input type="checkbox" class="export-cb" data-eid="${e.id}" ${e.export ? 'checked' : ''} ${e.tracked ? '' : 'disabled'}></td>
                     <td><span class="badge ${oper === 'up' ? 'up' : oper === 'down' ? 'down' : ''}">${oper}</span>
@@ -410,6 +450,18 @@
                 try { await api('PATCH', `/api/entities/${cb.dataset.eid}`, { export: cb.checked }); }
                 catch (e) { cb.checked = !cb.checked; alert(e.message); }
             });
+        }
+        const filterInput = document.getElementById('if-filter');
+        if (filterInput) {
+            const applyFilter = () => {
+                const q = ifFilter.trim().toLowerCase();
+                for (const tr of $main.querySelectorAll('tr[data-search]')) {
+                    tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none';
+                }
+            };
+            filterInput.addEventListener('input', () => { ifFilter = filterInput.value; applyFilter(); });
+            // Survive the auto-refresh re-render.
+            if (ifFilter) { filterInput.value = ifFilter; applyFilter(); }
         }
         for (const cb of $main.querySelectorAll('.tracked-cb')) {
             cb.addEventListener('click', (ev) => ev.stopPropagation());
@@ -465,6 +517,8 @@
             <span><input type="number" id="e-interval" min="30" style="width:110px" value="${d.pollIntervalS || ''}" placeholder="global"> seconds (blank = global ${d.effectiveIntervalS}s)</span>
             <label>Polling</label>
             <label><input type="checkbox" id="e-enabled" ${d.enabled ? 'checked' : ''}> enabled</label>
+            <label style="align-self:start">Notes</label>
+            <textarea id="e-notes" rows="3" placeholder="anything worth remembering about this device">${esc(d.notes)}</textarea>
         </div>
         <div class="form-actions">
             <button class="btn-primary" id="e-save">Save</button>
@@ -480,7 +534,8 @@
                 await api('PATCH', `/api/devices/${d.id}`, {
                     name: document.getElementById('e-name').value,
                     pollIntervalS: document.getElementById('e-interval').value || null,
-                    enabled: document.getElementById('e-enabled').checked
+                    enabled: document.getElementById('e-enabled').checked,
+                    notes: document.getElementById('e-notes').value
                 });
                 $modal.close();
                 renderDevice(d.id);
@@ -498,6 +553,7 @@
 
     // ===== entity history (graphs) =====
     const RANGES = [['1h', 3600], ['6h', 6 * 3600], ['24h', 86400], ['7d', 7 * 86400], ['30d', 30 * 86400], ['90d', 90 * 86400]];
+    let scaleToLink = false; // utilization mode: pin the traffic y-axis to link speed
 
     async function renderEntity(deviceId, entityId, rangeSec) {
         setNav('devices', true);
@@ -522,6 +578,8 @@
             <span class="spacer"></span>
             <div class="range-btns">
                 ${RANGES.map(([label, sec]) => `<button data-range="${sec}" class="${sec === rangeSec ? 'active' : ''}">${label}</button>`).join('')}
+                ${data.kind === 'if' && data.speedBps > 0 ? `<button id="scale-btn" class="${scaleToLink ? 'active' : ''}"
+                    title="Pin the traffic y-axis to the link speed (${fmtSpeed(data.speedBps)}bps) so the chart reads as utilization">Link scale</button>` : ''}
             </div>
         </div>
         <div id="charts"></div>`;
@@ -529,6 +587,11 @@
         for (const b of $main.querySelectorAll('[data-range]')) {
             b.addEventListener('click', () => renderEntity(deviceId, entityId, +b.dataset.range));
         }
+        const scaleBtn = document.getElementById('scale-btn');
+        if (scaleBtn) scaleBtn.addEventListener('click', () => {
+            scaleToLink = !scaleToLink;
+            renderEntity(deviceId, entityId, rangeSec);
+        });
 
         const wrap = document.getElementById('charts');
         const opts = { from, to, bucketSec: data.bucketSec };
@@ -539,6 +602,11 @@
         if (kind === 'if') {
             chartBlock(wrap, 'Traffic', {
                 ...opts, unit: 'bps',
+                yMax: scaleToLink && data.speedBps > 0 ? data.speedBps : undefined,
+                hlines: data.p95 ? [
+                    { value: data.p95.in, cls: 'a', label: '95th in' },
+                    { value: data.p95.out, cls: 'b', label: '95th out' }
+                ] : [],
                 series: [
                     { label: 'In (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
                     { label: 'In (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) },
@@ -624,6 +692,13 @@
                 <button id="p-save">Change password</button>
                 <span id="p-msg"></span>
             </div>
+        </div>
+        <div class="panel">
+            <h2>Backup</h2>
+            <div class="muted small" style="margin-bottom:8px">
+                Downloads a consistent snapshot of the whole database — devices, credentials, settings, and all history.
+                Restore by stopping SNMPCanvas and replacing <code>snmpcanvas.db</code> in the data directory with the snapshot.</div>
+            <a class="btn" href="/api/backup" download>Download database backup</a>
         </div>
         <div class="panel muted small">
             Data directory: <code>${esc(s.dataDir)}</code><br>

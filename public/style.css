@@ -156,6 +156,37 @@ button:disabled { opacity: 0.5; cursor: default; border-color: var(--se-border);
 .btn-danger { color: var(--se-down); }
 .btn-danger:hover { border-color: var(--se-down); }
 
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--se-accent); }
+
+.notes-block {
+    background: var(--se-panel);
+    border: 1px solid var(--se-border);
+    border-left: 3px solid var(--se-accent);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin: -4px 0 14px;
+    font-size: 13px;
+    color: var(--se-txt-dim);
+    white-space: pre-wrap;
+}
+
+a.btn { display: inline-block; text-decoration: none; }
+a.btn:hover { text-decoration: none; }
+
+textarea {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 5px 8px;
+    background: var(--se-input);
+    border: 1px solid var(--se-border);
+    border-radius: 4px;
+    color: var(--se-txt);
+    resize: vertical;
+    width: 100%;
+}
+textarea:focus { outline: none; border-color: var(--se-accent); }
+
 input[type="text"], input[type="password"], input[type="number"], select {
     font-family: inherit;
     font-size: 13px;
@@ -293,6 +324,7 @@ table.list th.num { text-align: right; }
 .chart-line-c { stroke: #d9a92f; stroke-width: 1.3; fill: none; }
 .chart-line-d { stroke: var(--se-down); stroke-width: 1.3; fill: none; }
 .chart-cursor { stroke: var(--se-txt-dim); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-hline { stroke-dasharray: 6 4; stroke-width: 1.2; opacity: 0.75; }
 .chart-tip {
     position: absolute;
     pointer-events: none;

@@ -93,6 +93,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `);
 
+// --- lightweight migrations for databases created by earlier versions ---
+const deviceCols = db.prepare('PRAGMA table_info(devices)').all().map((c) => c.name);
+if (!deviceCols.includes('notes')) db.exec('ALTER TABLE devices ADD COLUMN notes TEXT');
+
 // --- settings ---
 const getSettingStmt = db.prepare('SELECT value FROM settings WHERE key = ?');
 const setSettingStmt = db.prepare(

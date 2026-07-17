@@ -5,6 +5,8 @@
 // on top of the SameSite=Lax cookie).
 
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const { db, getSetting, setSetting, saveCredentials, loadCredentials, DATA_DIR } = require('./db');
 const auth = require('./auth');
 const discover = require('./discover');
@@ -50,7 +52,7 @@ function deviceSummary(d) {
     return {
         id: d.id, name: d.name, host: d.host, port: d.port, snmpVersion: d.snmp_version,
         sysDescr: d.sys_descr || '', sysName: d.sys_name || '', vendorKey: d.vendor_key,
-        enabled: !!d.enabled, status: d.status,
+        enabled: !!d.enabled, status: d.status, notes: d.notes || '',
         lastPollTs: d.last_poll_ts, lastSeenTs: d.last_seen_ts,
         uptimeSeconds: uptimeSeconds(d),
         pollIntervalS: d.poll_interval_s, effectiveIntervalS: effectiveInterval(d)
@@ -222,8 +224,9 @@ const routes = [
             ? (body.pollIntervalS ? Math.max(30, parseInt(body.pollIntervalS, 10) || 0) || null : null)
             : d.poll_interval_s;
         const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : d.enabled;
-        db.prepare('UPDATE devices SET name = ?, poll_interval_s = ?, enabled = ? WHERE id = ?')
-            .run(name, interval, enabled, d.id);
+        const notes = body.notes !== undefined ? String(body.notes).slice(0, 2000) : d.notes;
+        db.prepare('UPDATE devices SET name = ?, poll_interval_s = ?, enabled = ?, notes = ? WHERE id = ?')
+            .run(name, interval, enabled, notes, d.id);
         if (body.credentials && typeof body.credentials === 'object') {
             saveCredentials(d.id, credsFromBody({ version: d.snmp_version, ...body.credentials }));
         }
@@ -323,10 +326,43 @@ const routes = [
                    min(status) st
             FROM samples WHERE entity_id = @id AND ts >= @from AND ts <= @to
             GROUP BY t ORDER BY t`).all({ b: bucket, id: e.id, from, to });
+        // 95th percentile of the raw (unbucketed) samples in range — the
+        // classic capacity-planning number, for interfaces only.
+        let p95 = null;
+        if (e.kind === 'if') {
+            const pct = (col) => {
+                const n = db.prepare(`SELECT count(*) c FROM samples WHERE entity_id = ? AND ts >= ? AND ts <= ? AND ${col} IS NOT NULL`)
+                    .get(e.id, from, to).c;
+                if (n < 20) return null; // too few samples to be meaningful
+                return db.prepare(`SELECT ${col} v FROM samples WHERE entity_id = ? AND ts >= ? AND ts <= ? AND ${col} IS NOT NULL
+                                   ORDER BY ${col} LIMIT 1 OFFSET ?`)
+                    .get(e.id, from, to, Math.floor(n * 0.95)).v;
+            };
+            p95 = { in: pct('v0'), out: pct('v1') };
+        }
         ok(res, {
-            kind: e.kind, name: e.name, speedBps: e.speed_bps, bucketSec: bucket, from, to,
+            kind: e.kind, name: e.name, speedBps: e.speed_bps, bucketSec: bucket, from, to, p95,
             points: rows.map((r) => [r.t, r.a0, r.m0, r.a1, r.m1, r.a2, r.a3, r.a4, r.a5, r.st])
         });
+    } },
+
+    // Consistent snapshot of the database, streamed as a download.
+    { method: 'GET', path: /^\/api\/backup$/, handler: (req, res) => {
+        const tmp = path.join(DATA_DIR, `.backup-${Date.now()}.db`);
+        db.prepare('VACUUM INTO ?').run(tmp);
+        const stamp = new Date().toISOString().slice(0, 10);
+        const stat = fs.statSync(tmp);
+        res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': stat.size,
+            'Content-Disposition': `attachment; filename="snmpcanvas-${stamp}.db"`,
+            'Cache-Control': 'no-store'
+        });
+        const stream = fs.createReadStream(tmp);
+        const cleanup = () => fs.unlink(tmp, () => {});
+        stream.on('close', cleanup);
+        stream.on('error', cleanup);
+        stream.pipe(res);
     } },
 
     { method: 'GET', path: /^\/api\/settings$/, handler: (req, res) => {

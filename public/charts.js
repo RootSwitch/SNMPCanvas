@@ -77,6 +77,14 @@
             g += `<text class="chart-axis-label" x="${xx}" y="${H - PAD.b + 14}" text-anchor="middle">${esc(fmtTime(t, to - from))}</text>`;
         }
 
+        // horizontal reference lines (e.g. 95th percentile), drawn under the series
+        for (const h of opts.hlines || []) {
+            if (h.value == null || h.value <= 0 || h.value > yMax) continue;
+            const hy = y(h.value);
+            g += `<line class="chart-hline chart-line-${h.cls}" x1="${PAD.l}" y1="${hy}" x2="${W - PAD.r}" y2="${hy}"/>`;
+            g += `<text class="chart-axis-label" x="${W - PAD.r - 4}" y="${hy - 4}" text-anchor="end">${esc(h.label)} ${esc(fmtValue(h.value, unit))}</text>`;
+        }
+
         // series paths — null values (and gaps in time) break the line
         for (const s of series) {
             let line = '', area = '', run = [];
