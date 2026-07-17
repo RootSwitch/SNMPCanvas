@@ -7,15 +7,19 @@
 #   ./tools/gen-cert.sh                          # localhost only
 #   ./tools/gen-cert.sh 192.168.1.50 nas.lan     # reachable names/IPs
 #
-# Writes server.crt + server.key into ./data/certs/ (the same ./data you
-# mount into the container at /data). The server detects the pair on start
-# and switches to HTTPS automatically — restart the container after running
-# this. Browsers will warn about the self-signed cert once per browser;
-# to use a real certificate instead, just place your own PEM cert/key at
-# data/certs/server.crt and data/certs/server.key.
+# Writes server.crt + server.key into <data dir>/certs/, where <data dir> is
+# whatever host directory you mount at /data in the container — ./data by
+# default, or set CERT_DIR when you've pointed the volume elsewhere:
+#
+#   CERT_DIR=/srv/noc-data/certs ./tools/gen-cert.sh 192.168.1.50
+#
+# The server detects the pair on start and switches to HTTPS automatically —
+# restart the container after running this. Browsers will warn about the
+# self-signed cert once per browser; to use a real certificate instead, just
+# place your own PEM cert/key at <data dir>/certs/server.crt + server.key.
 set -e
 
-DIR="$(cd "$(dirname "$0")/.." && pwd)/data/certs"
+DIR="${CERT_DIR:-$(cd "$(dirname "$0")/.." && pwd)/data/certs}"
 mkdir -p "$DIR"
 
 CN="${1:-localhost}"

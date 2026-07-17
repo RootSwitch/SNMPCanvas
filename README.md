@@ -87,6 +87,15 @@ server detects the pair at startup and switches to HTTPS on the same port
 Drop your own PEM pair at those two paths (or point `TLS_CERT`/`TLS_KEY`
 elsewhere) — nothing else changes. Delete the files to fall back to HTTP.
 
+If you mount a different host directory at `/data` (say `/srv/noc-data`),
+the certs belong in *that* directory's `certs/` subfolder — tell the script
+with `CERT_DIR=/srv/noc-data/certs ./tools/gen-cert.sh ...`. Two symptoms of
+a cert the server can't use, both leaving the site on plain HTTP (browsers
+then show TLS record-length errors when you try https): the pair isn't at
+`<data>/certs/server.crt`+`server.key`, or it isn't readable by uid 1000 —
+`docker compose logs snmpcanvas | grep -i tls` names the problem, and
+`sudo chown -R 1000:1000 <data>/certs` fixes the second.
+
 ### Running without Docker
 
 Node 20+: `npm install && npm start` (listens on `:9161`, data in `./data`).
