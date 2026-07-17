@@ -1,6 +1,6 @@
 'use strict';
 // SQLite via better-sqlite3: one connection shared by the web handlers and the
-// poller (same process, synchronous library — no cross-connection contention).
+// poller (same process, synchronous library - no cross-connection contention).
 // WAL keeps web reads unblocked during poller writes.
 
 const path = require('node:path');
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS credentials (
 CREATE TABLE IF NOT EXISTS entities (
   id           INTEGER PRIMARY KEY,
   device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan')),
+  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge')),
   snmp_index   TEXT NOT NULL,
   name         TEXT,
   alias        TEXT,
@@ -131,16 +131,16 @@ if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code 
 
 // The kind CHECK constraint has grown over time ('temp', then 'fan');
 // SQLite can't alter a CHECK, so databases created before the newest kind
-// get a one-time table rebuild (ids preserved — samples reference them).
+// get a one-time table rebuild (ids preserved - samples reference them).
 const entitySql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entities'").get().sql;
-if (!entitySql.includes("'fan'")) {
+if (!entitySql.includes("'power'")) {
     db.pragma('foreign_keys = OFF');
     db.transaction(() => {
         db.exec(`
             CREATE TABLE entities_migrate (
               id           INTEGER PRIMARY KEY,
               device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan')),
+              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge')),
               snmp_index   TEXT NOT NULL,
               name         TEXT,
               alias        TEXT,

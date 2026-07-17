@@ -272,6 +272,27 @@ At add time SNMPCanvas GETs the system group, then walks:
 Devices that expose none of the CPU/memory tables simply don't show those
 cards - interfaces still work fully.
 
+### Custom sensors via snmpd `extend`
+
+Anything a shell command can print becomes a sensor. On the monitored host,
+add `extend` directives to `/etc/snmp/snmpd.conf` whose **names pick the
+kind by prefix** - `temp-` (°C), `fan-` (RPM), `power-` (watts), `util-`
+(percent) - and whose output is a single number:
+
+```
+extend temp-GPU   /usr/bin/nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits
+extend power-GPU  /usr/bin/nvidia-smi --query-gpu=power.draw --format=csv,noheader,nounits
+extend util-GPU   /usr/bin/nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits
+```
+
+Restart snmpd, rediscover the device, and the outputs appear as sensor
+cards with history. This is the doorway for data SNMP can't see natively:
+NVIDIA GPUs (no hwmon - AMD GPUs surface through lm-sensors automatically),
+UPS runtime, anything scriptable. The command runs under the *agent's*
+account on the monitored host - SNMPCanvas only ever reads the published
+number. (NVIDIA note: `fan.speed` reports percent, not RPM - name it
+`util-GPU-Fan`, not `fan-`.)
+
 If a device renumbers its `ifIndex`es (some do, after reboots or module
 changes), affected interfaces are flagged **stale** in the UI; use
 **Rediscover** on the device page to reconcile - new entities are added,

@@ -320,6 +320,32 @@ async function probe(target) {
             }
         }
 
+        // 7. NET-SNMP-EXTEND-MIB outputs: the agent owner publishes numbers
+        //    with one-line `extend` directives in snmpd.conf, named by a
+        //    convention that picks the kind: temp- (degrees C), fan- (RPM),
+        //    power- (watts), util- (percent). This is the doorway for data
+        //    SNMP can't see natively - nvidia-smi GPU stats, UPS runtime,
+        //    anything a shell command can print. Explicit configuration is
+        //    treated as intent: numeric outputs default to tracked.
+        const extendRows = await walkMap(walkSession, O.NSEXTEND_OUTPUT, warnings, 'snmpd extend outputs');
+        for (const [idx, rawValue] of extendRows) {
+            // Index is the extend name as a length-prefixed ASCII string.
+            const parts = idx.split('.').map(Number);
+            const name = String.fromCharCode(...parts.slice(1, 1 + parts[0]));
+            const m = /^(temp|fan|power|util)-(.+)$/i.exec(name);
+            if (!m) continue;
+            const kind = { temp: 'temp', fan: 'fan', power: 'power', util: 'gauge' }[m[1].toLowerCase()];
+            const label = { temp: 'Temp', fan: 'Fan', power: 'Power', gauge: 'Util' }[kind];
+            const value = parseFloat(String(rawValue));
+            entities.push({
+                kind,
+                snmpIndex: `ext-${name}`,
+                name: `${label}: ${m[2]}`,
+                extra: { style: 'extend', valueOid: `${O.NSEXTEND_OUTPUT}.${idx}` },
+                tracked: Number.isFinite(value)
+            });
+        }
+
         // Answered the system group but exposed no tables at all: almost
         // always a restricted SNMP view, not an SNMPCanvas problem.
         if (entities.length === 0) {

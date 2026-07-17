@@ -145,7 +145,7 @@ async function pollDevice(device) {
                 }
             } else if (e.kind === 'cpu') {
                 (extra.oids || []).forEach((oid, n) => { oids[`load${n}`] = oid; });
-            } else if (e.kind === 'temp' || e.kind === 'fan') {
+            } else if (e.kind === 'temp' || e.kind === 'fan' || e.kind === 'power' || e.kind === 'gauge') {
                 oids.value = extra.valueOid;
             } else if (extra.style === 'used-free') {
                 oids.used = extra.usedOid;
@@ -226,6 +226,14 @@ async function pollDevice(device) {
                 const rpm = sensorRaw(job.extra, values.get(job.oids.value));
                 v[0] = (rpm != null && rpm >= 0 && rpm < 60000) ? rpm : null;
                 updates.push({ id: e.id, poll_state: null });
+            } else if (e.kind === 'power') {
+                const w = sensorRaw(job.extra, values.get(job.oids.value));
+                v[0] = (w != null && w >= 0 && w < 1e6) ? w : null;
+                updates.push({ id: e.id, poll_state: null });
+            } else if (e.kind === 'gauge') {
+                const pct = sensorRaw(job.extra, values.get(job.oids.value));
+                v[0] = (pct != null && pct >= 0 && pct <= 100) ? pct : null;
+                updates.push({ id: e.id, poll_state: null });
             } else if (job.extra.style === 'used-free') {
                 const used = numOrNull(values.get(job.oids.used));
                 const free = numOrNull(values.get(job.oids.free));
@@ -264,9 +272,9 @@ function numOrNull(x) {
 // "Not Available"); numeric styles pass through as numbers.
 function sensorRaw(extra, value) {
     if (value == null) return null;
-    if (extra.style === 'asrock-str') {
+    if (extra.style === 'asrock-str' || extra.style === 'extend') {
         const n = parseFloat(String(value));
-        return Number.isFinite(n) ? n : null;   // "Not Available" -> null
+        return Number.isFinite(n) ? n : null;   // "Not Available"/error text -> null
     }
     return numOrNull(value);
 }

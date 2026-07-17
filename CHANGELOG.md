@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Custom sensors via snmpd `extend`** (NET-SNMP-EXTEND-MIB): name your
+  extend directives `temp-*`, `fan-*`, `power-*`, or `util-*` and their
+  numeric output becomes a tracked sensor with cards and history - the
+  doorway for NVIDIA GPU telemetry (nvidia-smi), UPS stats, and anything
+  else a shell one-liner can print. Adds `power` (watts) and `gauge`
+  (percent) entity kinds.
 - **Fan sensor support** (new `fan` entity kind): RPM cards - a tracked fan
   at 0 rpm paints its meter red - and history graphs. First source is the
   **ASRock Rack BMC sensor table** (AMI MegaRAC IPMI firmware), which also

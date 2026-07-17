@@ -66,6 +66,14 @@ const ASROCK_BMC = {
     valueOid: '1.3.6.1.4.1.49622.2.1.4'
 };
 
+// --- NET-SNMP-EXTEND-MIB (snmpd `extend` directive) ---
+// Anything the agent owner can print with a one-liner becomes a sensor:
+//   extend temp-GPU  /usr/bin/nvidia-smi --query-gpu=temperature.gpu ...
+// The name prefix picks the kind: temp- (degrees C), fan- (RPM),
+// power- (watts), util- (percent). Output must be a single number.
+// nsExtendOutput1Line, indexed by the extend name as a length-prefixed string.
+const NSEXTEND_OUTPUT = '1.3.6.1.4.1.8072.1.3.2.3.1.1';
+
 // --- Temperature sensors ---
 // LM-SENSORS-MIB (net-snmp with lmsensors — Linux hosts, Proxmox, FreeBSD/
 // TrueNAS drive temps). Values are milli-°C in practice.
@@ -139,4 +147,4 @@ function matchVendor(sysObjectID) {
     return best;
 }
 
-module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };
+module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, NSEXTEND_OUTPUT, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };
