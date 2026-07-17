@@ -67,12 +67,23 @@
         for (const a of $nav.querySelectorAll('a')) a.classList.toggle('active', a.dataset.nav === active);
     }
 
-    // ===== theme picker =====
+    // ===== theme picker (grouped like CrossCanvas's — ungrouped Classic
+    // first, then an <optgroup> per vibe, in themes.js authoring order) =====
     const $theme = document.getElementById('theme-select');
+    let optgroup = null;
     for (const [key, t] of Object.entries(Themes.THEMES)) {
         const o = document.createElement('option');
         o.value = key; o.textContent = t.label;
-        $theme.appendChild(o);
+        if (!t.group) {
+            $theme.appendChild(o);
+        } else {
+            if (!optgroup || optgroup.label !== t.group) {
+                optgroup = document.createElement('optgroup');
+                optgroup.label = t.group;
+                $theme.appendChild(optgroup);
+            }
+            optgroup.appendChild(o);
+        }
     }
     $theme.value = Themes.currentTheme();
     $theme.addEventListener('change', () => Themes.applyTheme($theme.value));
