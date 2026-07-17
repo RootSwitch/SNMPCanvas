@@ -479,7 +479,7 @@
         document.getElementById('dev-rediscover').addEventListener('click', async (ev) => {
             ev.target.disabled = true; ev.target.textContent = 'Rediscovering…';
             try {
-                const r = await api('POST', `/api/devices/${id}/rediscover`);
+                const r = await api('POST', `/api/devices/${id}/rediscover`, {});
                 const s = r.summary;
                 alert(`Rediscovery complete.\nAdded: ${s.added.length ? s.added.join(', ') : 'none'}\nRemoved: ${s.removed.length ? s.removed.join(', ') : 'none'}\nRenamed: ${s.updated.length ? s.updated.join(', ') : 'none'}`);
                 renderDevice(id);
