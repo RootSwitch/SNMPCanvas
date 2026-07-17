@@ -105,9 +105,11 @@
         setAutoRefresh(null);
         $main.innerHTML = `
         <div class="login-wrap"><div class="login-card">
-            <h1><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--se-accent)" stroke-width="1.6">
-                <rect x="2" y="5" width="20" height="14" rx="2.5"/>
-                <polyline points="5,14.5 9,14.5 11,9.5 13,16.5 15,12.5 19,12.5" stroke="var(--se-logo-a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <h1><svg width="20" height="20" viewBox="0 0 64 64" fill="none" stroke="var(--se-accent)">
+                <path d="M32 5 L32 12" stroke-width="5" stroke-linecap="round"/>
+                <path d="M18 45 L12 59 M46 45 L52 59 M32 45 L32 59" stroke-width="5" stroke-linecap="round"/>
+                <rect x="9" y="12" width="46" height="34" rx="3" fill="#f4f1ea" stroke-width="4"/>
+                <polyline points="13.5,30 20,30 23,25.5 26,30 31,30 34,18 38,40.5 41,30 44.5,27 47.5,30 50.5,30" stroke="var(--se-logo-b)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
             </svg> SNMPCanvas</h1>
             <div class="sub">${needsSetup ? 'First run — choose an admin password (8+ characters).' : 'Enter the password to continue.'}</div>
             <form id="login-form">
