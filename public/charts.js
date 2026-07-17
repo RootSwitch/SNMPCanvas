@@ -78,12 +78,18 @@
             g += `<text class="chart-axis-label" x="${xx}" y="${H - PAD.b + 14}" text-anchor="middle">${esc(fmtTime(t, to - from))}</text>`;
         }
 
-        // horizontal reference lines (e.g. 95th percentile), drawn under the series
-        for (const h of opts.hlines || []) {
-            if (h.value == null || h.value <= 0 || h.value > yMax) continue;
+        // horizontal reference lines (e.g. 95th percentile), drawn under the
+        // series; when two lines nearly coincide, the second label drops
+        // below its line so the two never overprint
+        let lastLabelY = null;
+        const hlines = (opts.hlines || []).filter((h) => h.value != null && h.value > 0 && h.value <= yMax)
+            .sort((a, b) => b.value - a.value);
+        for (const h of hlines) {
             const hy = y(h.value);
             g += `<line class="chart-hline chart-line-${h.cls}" x1="${PAD.l}" y1="${hy}" x2="${W - PAD.r}" y2="${hy}"/>`;
-            g += `<text class="chart-axis-label" x="${W - PAD.r - 4}" y="${hy - 4}" text-anchor="end">${esc(h.label)} ${esc(fmtValue(h.value, unit))}</text>`;
+            const labelY = (lastLabelY != null && Math.abs(hy - 4 - lastLabelY) < 12) ? hy + 12 : hy - 4;
+            g += `<text class="chart-axis-label" x="${W - PAD.r - 4}" y="${labelY}" text-anchor="end">${esc(h.label)} ${esc(fmtValue(h.value, unit))}</text>`;
+            lastLabelY = labelY;
         }
 
         // series paths — null values (and gaps in time) break the line
