@@ -65,6 +65,10 @@ written to a small JSON status file every cycle, for other tools to read.
   entity per day.
 - **Single shared password** for the UI (scrypt-hashed), sessions, login
   rate limiting, and one-click database backups from the Settings page.
+- **Inventory export** - download the monitored fleet as a CSV that
+  [CrossCanvas](https://github.com/RootSwitch/CrossCanvas) imports directly
+  (File -> Import inventory), so devices SNMPCanvas already discovered can seed
+  a diagram - and a device with an IP is monitoring-ready in PingCanvas at once.
 - **29 themes** carried over from CrossCanvas's palette family, grouped the
   same way (Paper / Warm / Cool / Night / Screen).
 
@@ -231,10 +235,12 @@ PingCanvas can stay a dumb "code -> text" swapper:
 }
 ```
 
-Only `kind:"cpu"` carries a coloring `status` (`ok` under 85%, `warn` to
-94%, `crit` at 95%+) - everything else is display-only, so a wall shows the
-number without screaming about it. Unavailable values keep their entry with
-`display: "--"`. Export checkboxes live in the interface table (interfaces),
+`kind:"cpu"` (`ok` under 85%, `warn` to 94%, `crit` at 95%+) and
+`kind:"battery"` (`ok`, `warn`/`crit` as charge drops) carry a coloring
+`status`; every other kind is display-only, so a wall shows the number without
+screaming about it. The status field is forward-safe either way: today's kiosk
+colors a device frame from CPU status and ignores the rest until a coloring
+gate opens. Unavailable values keep their entry with `display: "--"`. Export checkboxes live in the interface table (interfaces),
 the **Sensors** dialog (everything else), and the device **Edit** dialog
 (uptime); each exported item shows its code chip in the UI, already wrapped
 in braces and copied to the clipboard on click.
