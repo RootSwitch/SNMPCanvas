@@ -56,6 +56,41 @@
     }
     function dot(status) { return `<span class="dot ${esc(status)}"></span>`; }
 
+    // Code chips render as paste-ready {code} tokens (PingCanvas board
+    // syntax) and copy themselves on click instead of triggering whatever
+    // they happen to sit inside (row links, cards).
+    function codeChip(code) {
+        return code ? `<span class="code-chip" title="Click to copy {${esc(code)}}">{${esc(code)}}</span>` : '';
+    }
+
+    function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+        // Plain-http fallback (LAN deployments without TLS)
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } finally { ta.remove(); }
+        return Promise.resolve();
+    }
+
+    // Capture phase so the copy wins over row-navigation click handlers.
+    document.addEventListener('click', (ev) => {
+        const chip = ev.target.closest?.('.code-chip');
+        if (!chip) return;
+        ev.stopPropagation();
+        ev.preventDefault();
+        const token = chip.textContent.trim();
+        copyText(token).then(() => {
+            chip.classList.add('copied');
+            const prev = chip.textContent;
+            chip.textContent = 'copied';
+            setTimeout(() => { chip.textContent = prev; chip.classList.remove('copied'); }, 700);
+        }).catch(() => { /* clipboard unavailable — token stays selectable */ });
+    }, true);
+
     function setAutoRefresh(fn, ms) {
         clearInterval(refreshTimer);
         refreshTimer = fn ? setInterval(fn, ms) : null;
@@ -424,7 +459,7 @@
                     <td><input type="checkbox" class="export-cb" data-eid="${e.id}" ${e.export ? 'checked' : ''} ${e.tracked ? '' : 'disabled'}></td>
                     <td><span class="badge ${oper === 'up' ? 'up' : oper === 'down' ? 'down' : ''}">${oper}</span>
                         ${e.stale ? '<span class="badge stale" title="ifIndex may have moved — rediscover this device">stale</span>' : ''}</td>
-                    <td><strong>${esc(e.name)}</strong>${e.code ? ` <span class="code-chip" title="Short key for snmp-status.json consumers (PingCanvas)">${esc(e.code)}</span>` : ''}</td>
+                    <td><strong>${esc(e.name)}</strong> ${codeChip(e.code)}</td>
                     <td class="muted hide-sm">${esc(e.alias)}</td>
                     <td class="num">${fmtSpeed(e.speedBps)}</td>
                     <td class="num">${e.tracked ? fmtBps(v[0]) : '—'}</td>
@@ -494,7 +529,7 @@
     function resourceCard(e) {
         const v = e.latest ? e.latest.v : [];
         // Exported sensors wear their code chip — the key a dashboard binds to.
-        const chip = e.export && e.code ? ` <span class="code-chip">${esc(e.code)}</span>` : '';
+        const chip = e.export && e.code ? ' ' + codeChip(e.code) : '';
         if (e.kind === 'temp') {
             const c = v[0];
             return `<div class="card" data-eid="${e.id}">
@@ -568,7 +603,7 @@
                     <input type="checkbox" class="ms-export" title="Export to snmp-status.json"
                         data-eid="${e.id}" data-was="${e.export ? 1 : 0}" ${e.export ? 'checked' : ''} ${e.tracked ? '' : 'disabled'}>
                     <span class="grow">${esc(e.name)}</span>
-                    ${e.code ? `<span class="code-chip">${esc(e.code)}</span>` : ''}
+                    ${codeChip(e.code)}
                     ${e.latest && e.latest.v[0] != null && kind === 'temp' ? `<span class="muted small">${e.latest.v[0].toFixed(1)}°C</span>` : ''}
                 </div>`).join('')}
             </div></div>`;
@@ -612,7 +647,7 @@
             <label><input type="checkbox" id="e-enabled" ${d.enabled ? 'checked' : ''}> enabled</label>
             <label>Uptime</label>
             <label><input type="checkbox" id="e-uptime" ${d.exportUptime ? 'checked' : ''}> export to snmp-status.json
-                ${d.uptimeCode ? `<span class="code-chip">${esc(d.uptimeCode)}</span>` : ''}</label>
+                ${codeChip(d.uptimeCode)}</label>
             <label style="align-self:start">Notes</label>
             <textarea id="e-notes" rows="3" placeholder="anything worth remembering about this device">${esc(d.notes)}</textarea>
         </div>
@@ -671,7 +706,7 @@
         <div class="page-head">
             <a href="#/device/${deviceId}" class="muted">← Device</a>
             <h1>${esc(data.name)}</h1>
-            ${data.code ? `<span class="code-chip" title="Short key for snmp-status.json consumers (PingCanvas)">${esc(data.code)}</span>` : ''}
+            ${codeChip(data.code)}
             <span class="sub">${data.bucketSec >= 3600 ? (data.bucketSec / 3600) + 'h' : (data.bucketSec / 60) + 'm'} buckets</span>
             <span class="spacer"></span>
             <div class="range-btns">

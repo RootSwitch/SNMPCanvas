@@ -270,7 +270,8 @@ table.list th.num { text-align: right; }
 .badge.down { color: var(--se-down); border-color: var(--se-down); }
 .badge.stale { color: #d9a92f; border-color: #d9a92f; }
 
-/* Short interface key (snmp-status.json `code`) */
+/* Short sensor/interface key (snmp-status.json `code`), shown as a
+   paste-ready {code} token; click copies it. */
 .code-chip {
     font-family: ui-monospace, Consolas, monospace;
     font-size: 11px;
@@ -280,8 +281,11 @@ table.list th.num { text-align: right; }
     border-radius: 4px;
     padding: 0 5px;
     letter-spacing: 0.5px;
-    cursor: default;
+    cursor: pointer;
+    user-select: none;
 }
+.code-chip:hover { border-color: var(--se-accent); color: var(--se-txt); }
+.code-chip.copied { color: var(--se-up); border-color: var(--se-up); }
 
 /* ===== Resource cards (CPU / memory / filesystems) ===== */
 .cards {
