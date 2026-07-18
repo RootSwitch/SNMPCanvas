@@ -120,6 +120,23 @@ const VENDORS = [
         }
     },
     {
+        // Budget 2-port IP power strips (shared OEM firmware, two badges).
+        // Outlet state 1=on/0=off; the ZDL variant adds an internal temp
+        // sensor in tenths of a degree Fahrenheit (confirmed against the
+        // unit's own display).
+        key: 'zdl-pdu',
+        label: 'ZDL power strip',
+        prefix: '1.3.6.1.4.1.30650.',
+        outlets: { stateOid: '1.3.6.1.4.1.30650.3.3.3.1.4' },
+        temp: { style: 'walk-tenthF', oid: '1.3.6.1.4.1.30650.3.3.5.1.3' }
+    },
+    {
+        key: 'pdu02ip',
+        label: 'PDU02IP power strip',
+        prefix: '1.3.6.1.4.1.26104.',
+        outlets: { stateOid: '1.3.6.1.4.1.26104.3.3.3.1.4' }
+    },
+    {
         key: 'mikrotik',
         label: 'MikroTik RouterOS',
         prefix: '1.3.6.1.4.1.14988.',
@@ -143,9 +160,12 @@ const VENDORS = [
 
 function matchVendor(sysObjectID) {
     if (!sysObjectID) return null;
+    // Trailing-dot compare so a sysObjectID that IS the bare enterprise root
+    // (some budget devices) still matches its "1.3.6.1.4.1.NNNN." prefix.
+    const candidate = sysObjectID + '.';
     let best = null;
     for (const v of VENDORS) {
-        if (sysObjectID.startsWith(v.prefix) && (!best || v.prefix.length > best.prefix.length)) best = v;
+        if (candidate.startsWith(v.prefix) && (!best || v.prefix.length > best.prefix.length)) best = v;
     }
     return best;
 }

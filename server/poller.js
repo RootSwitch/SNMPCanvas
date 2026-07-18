@@ -145,7 +145,7 @@ async function pollDevice(device) {
                 }
             } else if (e.kind === 'cpu') {
                 (extra.oids || []).forEach((oid, n) => { oids[`load${n}`] = oid; });
-            } else if (['temp', 'fan', 'power', 'gauge', 'battery', 'runtime'].includes(e.kind)) {
+            } else if (['temp', 'fan', 'power', 'gauge', 'battery', 'runtime', 'outlet'].includes(e.kind)) {
                 oids.value = extra.valueOid;
             } else if (extra.style === 'used-free') {
                 oids.used = extra.usedOid;
@@ -238,6 +238,11 @@ async function pollDevice(device) {
                 const sec = sensorRaw(job.extra, values.get(job.oids.value));
                 v[0] = (sec != null && sec >= 0 && sec < 1e7) ? sec : null;
                 updates.push({ id: e.id, poll_state: null });
+            } else if (e.kind === 'outlet') {
+                const st = numOrNull(values.get(job.oids.value));
+                v[0] = st == null ? null : (st ? 1 : 0);
+                status = v[0] == null ? null : (v[0] ? 1 : 2);   // reuse up/down badge semantics
+                updates.push({ id: e.id, oper_status: status, poll_state: null });
             } else if (job.extra.style === 'used-free') {
                 const used = numOrNull(values.get(job.oids.used));
                 const free = numOrNull(values.get(job.oids.free));
@@ -300,6 +305,7 @@ function tempToC(extra, raw) {
     if (extra.style === 'lm') c = raw >= 1000 ? raw / 1000 : raw;               // LM-SENSORS milli-°C
     else if (extra.style === 'entity') c = raw * Math.pow(10, (extra.scaleExp || 0) - (extra.precision || 0));
     else if (extra.style === 'asrock-str') c = raw;                             // already °C after parse
+    else if (extra.style === 'tenthF') c = (raw / 10 - 32) * 5 / 9;             // budget PDUs: tenths of °F
     else c = raw / (extra.div || 1);                                            // vendor scalars/tables
     return (c <= -40 || c >= 150) ? null : c;
 }

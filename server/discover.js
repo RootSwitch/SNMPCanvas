@@ -236,6 +236,17 @@ async function probe(target) {
                         tracked: plausibleC(Number(raw) / (t.div || 1))
                     });
                 }
+            } else if (vendor.temp.style === 'walk-tenthF') {
+                // Tenths of a degree Fahrenheit (budget PDU internal sensors).
+                const rows = await walkMap(walkSession, vendor.temp.oid, warnings, `${vendor.key} temperature`);
+                for (const [idx, raw] of rows) {
+                    const c = Number.isFinite(Number(raw)) ? (Number(raw) / 10 - 32) * 5 / 9 : null;
+                    entities.push({
+                        kind: 'temp', snmpIndex: `v-${idx}`, name: `Temp: Sensor ${idx}`,
+                        extra: { style: 'tenthF', valueOid: `${vendor.temp.oid}.${idx}` },
+                        tracked: plausibleC(c)
+                    });
+                }
             } else if (vendor.temp.style === 'walk-descr-value') {
                 const names = await walkMap(walkSession, vendor.temp.descrOid, warnings, `${vendor.key} temperatures`);
                 for (const [idx, name] of names) {
@@ -245,6 +256,18 @@ async function probe(target) {
                         tracked: true
                     });
                 }
+            }
+        }
+
+        // Switched power strips: one entity per outlet (state 1=on, 0=off).
+        if (vendor && vendor.outlets) {
+            const states = await walkMap(walkSession, vendor.outlets.stateOid, warnings, `${vendor.key} outlets`);
+            for (const [idx] of states) {
+                entities.push({
+                    kind: 'outlet', snmpIndex: idx, name: `Outlet ${idx}`,
+                    extra: { style: 'outlet', valueOid: `${vendor.outlets.stateOid}.${idx}` },
+                    tracked: true
+                });
             }
         }
 

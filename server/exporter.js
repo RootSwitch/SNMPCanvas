@@ -39,7 +39,7 @@ function fmtUptime(sec) {
 // Per-kind display strings, kept SHORT for label lines. A null value keeps
 // the entry with "--" so an authored code never looks like a typo.
 function metricDisplay(kind, name, v0, v1) {
-    const NULL_LABEL = { cpu: 'CPU', mem: 'Mem', fs: 'Disk', temp: 'Temp', fan: 'Fan', power: 'Power', battery: 'Batt', runtime: 'Runtime' };
+    const NULL_LABEL = { cpu: 'CPU', mem: 'Mem', fs: 'Disk', temp: 'Temp', fan: 'Fan', power: 'Power', battery: 'Batt', runtime: 'Runtime', outlet: 'Outlet' };
     if (v0 == null) {
         const label = kind === 'gauge' ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
         return { display: `${label ? label + ' ' : ''}--`, value: null };
@@ -60,6 +60,7 @@ function metricDisplay(kind, name, v0, v1) {
         case 'fan': return { display: `Fan ${Math.round(v0)}rpm`, value: Math.round(v0), unit: 'rpm' };
         case 'power': return { display: `Power ${v0 >= 100 ? Math.round(v0) : v0.toFixed(1)}W`, value: v0, unit: 'W' };
         case 'battery': return { display: `Batt ${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
+        case 'outlet': return { display: v0 ? 'Outlet On' : 'Outlet Off', value: v0 ? 1 : 0 };
         case 'runtime': {
             const d = v0 >= 86400 ? `${Math.floor(v0 / 86400)}d ${Math.floor(v0 % 86400 / 3600)}h`
                 : v0 >= 3600 ? `${Math.floor(v0 / 3600)}h ${Math.round(v0 % 3600 / 60)}m`

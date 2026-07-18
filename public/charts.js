@@ -17,6 +17,7 @@
         if (unit === 'degc') return v.toFixed(1) + ' °C';
         if (unit === 'rpm') return Math.round(v) + ' rpm';
         if (unit === 'w') return fmtSI(v, 1000, ['W', 'kW', 'MW']);
+        if (unit === 'onoff') return v >= 0.99 ? 'On' : v <= 0.01 ? 'Off' : (v * 100).toFixed(0) + '% on';
         if (unit === 'dur') {
             if (v >= 86400) return Math.floor(v / 86400) + 'd ' + Math.floor(v % 86400 / 3600) + 'h';
             if (v >= 3600) return Math.floor(v / 3600) + 'h ' + Math.round(v % 3600 / 60) + 'm';
