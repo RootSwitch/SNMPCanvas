@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (unreleased)
+
+- **snmp-status.json schema v2**: a new `metrics[]` array publishes any
+  exported non-interface sensor (CPU, memory, disk, temperature, fan,
+  power, utilization) plus per-device uptime as
+  `{ code, kind, host, display, value, unit, status?, sampledAt }` with
+  short pre-formatted display strings. Only CPU carries an ok/warn/crit
+  status; everything else is display-only. Every sensor now mints a short
+  stable code (shown as chips in the Sensors dialog and on exported
+  cards); Export checkboxes appear in the Sensors dialog and an uptime
+  export toggle in the device Edit dialog. `interfaces[]` is unchanged, so
+  v1 consumers keep working.
 
 - **Custom sensors via snmpd `extend`** (NET-SNMP-EXTEND-MIB): name your
   extend directives `temp-*`, `fan-*`, `power-*`, or `util-*` and their

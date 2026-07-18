@@ -196,8 +196,33 @@ SNMPCanvas is a networked app with a small, deliberate threat model:
 
 ## snmp-status.json
 
-Every poll cycle, all exported interfaces across all devices are written
-atomically to one file (default `/data/snmp-status.json`):
+Every poll cycle, everything marked **Export** is written atomically to one
+file (default `/data/snmp-status.json`). Interfaces go to `interfaces[]`;
+every other exported sensor - CPU, memory, disk, temperature, fan, power,
+utilization, plus per-device uptime (Edit dialog) - goes to `metrics[]` as a
+code plus a short pre-formatted `display` string, so a consumer like
+PingCanvas can stay a dumb "code -> text" swapper:
+
+```json
+{
+  "schemaVersion": 2,
+  "interfaces": [ ... ],
+  "metrics": [
+    { "code": "C1", "kind": "cpu", "host": "compute-01",
+      "display": "CPU 45%", "value": 45, "unit": "%", "status": "ok",
+      "sampledAt": "2026-07-17T01:10:42Z" }
+  ]
+}
+```
+
+Only `kind:"cpu"` carries a coloring `status` (`ok` under 85%, `warn` to
+94%, `crit` at 95%+) - everything else is display-only, so a wall shows the
+number without screaming about it. Unavailable values keep their entry with
+`display: "--"`. Export checkboxes live in the interface table (interfaces),
+the **Sensors** dialog (everything else), and the device **Edit** dialog
+(uptime); each exported item shows its code chip in the UI.
+
+The v1 `interfaces[]` shape is unchanged:
 
 ```json
 {

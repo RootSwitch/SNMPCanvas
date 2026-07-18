@@ -53,6 +53,7 @@ function deviceSummary(d) {
         id: d.id, name: d.name, host: d.host, port: d.port, snmpVersion: d.snmp_version,
         sysDescr: d.sys_descr || '', sysName: d.sys_name || '', vendorKey: d.vendor_key,
         enabled: !!d.enabled, status: d.status, notes: d.notes || '',
+        exportUptime: !!d.export_uptime, uptimeCode: d.uptime_code || null,
         lastPollTs: d.last_poll_ts, lastSeenTs: d.last_seen_ts,
         uptimeSeconds: uptimeSeconds(d),
         pollIntervalS: d.poll_interval_s, effectiveIntervalS: effectiveInterval(d)
@@ -185,20 +186,20 @@ const routes = [
 
         const deviceId = db.transaction(() => {
             const info = db.prepare(`INSERT INTO devices
-                (name, host, port, snmp_version, sys_descr, sys_object_id, sys_name, vendor_key, poll_interval_s, created_ts)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                (name, host, port, snmp_version, sys_descr, sys_object_id, sys_name, vendor_key, poll_interval_s, created_ts, uptime_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                 .run(name, target.host, target.port, target.version, result.system.sysDescr,
                      result.system.sysObjectID, result.system.sysName, result.vendorKey, interval,
-                     Math.floor(Date.now() / 1000));
+                     Math.floor(Date.now() / 1000), generateIfCode(name, 'uptime'));
             const id = info.lastInsertRowid;
             saveCredentials(id, target.creds);
             const ins = db.prepare(`INSERT INTO entities (device_id, kind, snmp_index, name, alias, speed_bps, extra, tracked, admin_status, oper_status, code)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
             for (const e of result.entities) {
                 const tracked = chosen.has(`${e.kind}:${e.snmpIndex}`) ? chosen.get(`${e.kind}:${e.snmpIndex}`) : e.tracked;
-                const code = e.kind === 'if' ? generateIfCode(name, e.name) : null;
                 ins.run(id, e.kind, String(e.snmpIndex), e.name, e.alias || null, e.speedBps || null,
-                        JSON.stringify(e.extra || {}), tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null, code);
+                        JSON.stringify(e.extra || {}), tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null,
+                        generateIfCode(name, e.name));
             }
             return id;
         })();
@@ -226,8 +227,9 @@ const routes = [
             : d.poll_interval_s;
         const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : d.enabled;
         const notes = body.notes !== undefined ? String(body.notes).slice(0, 2000) : d.notes;
-        db.prepare('UPDATE devices SET name = ?, poll_interval_s = ?, enabled = ?, notes = ? WHERE id = ?')
-            .run(name, interval, enabled, notes, d.id);
+        const exportUptime = body.exportUptime !== undefined ? (body.exportUptime ? 1 : 0) : d.export_uptime;
+        db.prepare('UPDATE devices SET name = ?, poll_interval_s = ?, enabled = ?, notes = ?, export_uptime = ? WHERE id = ?')
+            .run(name, interval, enabled, notes, exportUptime, d.id);
         if (body.credentials && typeof body.credentials === 'object') {
             saveCredentials(d.id, credsFromBody({ version: d.snmp_version, ...body.credentials }));
         }
@@ -278,9 +280,9 @@ const routes = [
                 seen.add(key);
                 const cur = byKey.get(key);
                 if (!cur) {
-                    const code = e.kind === 'if' ? generateIfCode(d.name, e.name) : null;
                     ins.run(d.id, e.kind, String(e.snmpIndex), e.name, e.alias || null, e.speedBps || null,
-                            JSON.stringify(e.extra || {}), e.tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null, code);
+                            JSON.stringify(e.extra || {}), e.tracked ? 1 : 0, e.adminStatus || null, e.operStatus || null,
+                            generateIfCode(d.name, e.name));
                     summary.added.push(`${e.kind} ${e.name}`);
                 } else {
                     if (cur.name !== e.name) summary.updated.push(`${cur.name} → ${e.name}`);

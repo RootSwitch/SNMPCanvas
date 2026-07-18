@@ -1,6 +1,6 @@
 {
   "name": "snmpcanvas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lightweight self-hosted SNMP monitoring: poll SNMPv2c/v3 devices, store history in SQLite, view it in a dependency-free web UI.",
   "license": "Unlicense",
   "repository": {

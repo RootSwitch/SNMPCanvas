@@ -94,12 +94,13 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `);
 
-// --- interface short codes ---
+// --- short codes (interfaces, sensors, device uptime) ---
 // A compact, human-typeable key for external consumers (snmp-status.json /
-// PingCanvas): derived from md5("deviceName:ifName") so a re-added device
-// regenerates the same codes, persisted on the entity so nothing that
-// happens later (un-export, rediscover, rename) can change one, and
-// collision-checked at mint time (the newcomer gets a longer form).
+// PingCanvas): derived from md5("deviceName:entityName") so a re-added
+// device regenerates the same codes, persisted so nothing that happens
+// later (un-export, rediscover, rename) can change one, and collision-
+// checked at mint time (the newcomer gets a longer form). Codes never
+// contain ':' so they can't collide with "Device:Interface" id strings.
 // Alphabet drops 0/O and 1/I lookalikes.
 const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
@@ -115,9 +116,14 @@ function codeCandidates(deviceName, ifName) {
     return out;
 }
 
-function generateIfCode(deviceName, ifName, taken) {
-    for (const c of codeCandidates(deviceName, ifName)) {
-        if (taken ? !taken.has(c) : !db.prepare('SELECT 1 FROM entities WHERE code = ?').get(c)) return c;
+function codeIsTaken(c) {
+    return db.prepare('SELECT 1 FROM entities WHERE code = ?').get(c) ||
+           db.prepare('SELECT 1 FROM devices WHERE uptime_code = ?').get(c);
+}
+
+function generateIfCode(deviceName, entityName, taken) {
+    for (const c of codeCandidates(deviceName, entityName)) {
+        if (taken ? !taken.has(c) : !codeIsTaken(c)) return c;
     }
     return crypto.randomBytes(4).toString('hex').toUpperCase(); // unreachable in practice
 }
@@ -125,6 +131,8 @@ function generateIfCode(deviceName, ifName, taken) {
 // --- lightweight migrations for databases created by earlier versions ---
 const deviceCols = db.prepare('PRAGMA table_info(devices)').all().map((c) => c.name);
 if (!deviceCols.includes('notes')) db.exec('ALTER TABLE devices ADD COLUMN notes TEXT');
+if (!deviceCols.includes('export_uptime')) db.exec('ALTER TABLE devices ADD COLUMN export_uptime INTEGER NOT NULL DEFAULT 0');
+if (!deviceCols.includes('uptime_code')) db.exec('ALTER TABLE devices ADD COLUMN uptime_code TEXT');
 
 const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
 if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');
@@ -169,19 +177,30 @@ if (!entitySql.includes("'power'")) {
 db.exec('CREATE INDEX IF NOT EXISTS idx_entities_export ON entities(export) WHERE export = 1');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_code ON entities(code) WHERE code IS NOT NULL');
 
-// Backfill codes for interfaces created before the column existed.
+// Backfill codes for entities (any kind) and device uptime codes created
+// before those columns existed.
 {
-    const missing = db.prepare(`SELECT e.id, e.name AS if_name, d.name AS device_name
+    const taken = new Set([
+        ...db.prepare('SELECT code FROM entities WHERE code IS NOT NULL').all().map((r) => r.code),
+        ...db.prepare('SELECT uptime_code FROM devices WHERE uptime_code IS NOT NULL').all().map((r) => r.uptime_code)
+    ]);
+    const missing = db.prepare(`SELECT e.id, e.name AS entity_name, d.name AS device_name
                                 FROM entities e JOIN devices d ON d.id = e.device_id
-                                WHERE e.kind = 'if' AND e.code IS NULL ORDER BY e.id`).all();
-    if (missing.length > 0) {
-        const taken = new Set(db.prepare('SELECT code FROM entities WHERE code IS NOT NULL').all().map((r) => r.code));
-        const upd = db.prepare('UPDATE entities SET code = ? WHERE id = ?');
+                                WHERE e.code IS NULL ORDER BY e.id`).all();
+    const missingUptime = db.prepare('SELECT id, name FROM devices WHERE uptime_code IS NULL ORDER BY id').all();
+    if (missing.length > 0 || missingUptime.length > 0) {
+        const updE = db.prepare('UPDATE entities SET code = ? WHERE id = ?');
+        const updD = db.prepare('UPDATE devices SET uptime_code = ? WHERE id = ?');
         db.transaction(() => {
             for (const m of missing) {
-                const code = generateIfCode(m.device_name, m.if_name, taken);
+                const code = generateIfCode(m.device_name, m.entity_name, taken);
                 taken.add(code);
-                upd.run(code, m.id);
+                updE.run(code, m.id);
+            }
+            for (const m of missingUptime) {
+                const code = generateIfCode(m.name, 'uptime', taken);
+                taken.add(code);
+                updD.run(code, m.id);
             }
         })();
     }

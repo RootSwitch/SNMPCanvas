@@ -493,10 +493,12 @@
 
     function resourceCard(e) {
         const v = e.latest ? e.latest.v : [];
+        // Exported sensors wear their code chip — the key a dashboard binds to.
+        const chip = e.export && e.code ? ` <span class="code-chip">${esc(e.code)}</span>` : '';
         if (e.kind === 'temp') {
             const c = v[0];
             return `<div class="card" data-eid="${e.id}">
-                <div class="card-title">${esc(e.name)}</div>
+                <div class="card-title">${esc(e.name)}${chip}</div>
                 <div class="card-value">${c == null ? '—' : c.toFixed(1) + '°C'}</div>
                 <div class="meter"><i class="${c >= 70 ? 'hot' : ''}" style="width:${Math.min(100, c || 0)}%"></i></div>
             </div>`;
@@ -505,7 +507,7 @@
             const rpm = v[0];
             // A tracked fan reading 0 is the alarm case — paint it hot.
             return `<div class="card" data-eid="${e.id}">
-                <div class="card-title">${esc(e.name)}</div>
+                <div class="card-title">${esc(e.name)}${chip}</div>
                 <div class="card-value">${rpm == null ? '—' : Math.round(rpm) + ' rpm'}</div>
                 <div class="meter"><i class="${rpm === 0 ? 'hot' : ''}" style="width:${rpm === 0 ? 100 : Math.min(100, (rpm || 0) / 80)}%"></i></div>
             </div>`;
@@ -513,7 +515,7 @@
         if (e.kind === 'power') {
             const w = v[0];
             return `<div class="card" data-eid="${e.id}">
-                <div class="card-title">${esc(e.name)}</div>
+                <div class="card-title">${esc(e.name)}${chip}</div>
                 <div class="card-value">${w == null ? '—' : (w >= 1000 ? (w / 1000).toFixed(2) + ' kW' : w.toFixed(1) + ' W')}</div>
                 <div class="meter"><i style="width:${Math.min(100, (w || 0) / 10)}%"></i></div>
             </div>`;
@@ -521,7 +523,7 @@
         if (e.kind === 'gauge') {
             const pct = v[0];
             return `<div class="card" data-eid="${e.id}">
-                <div class="card-title">${esc(e.name)}</div>
+                <div class="card-title">${esc(e.name)}${chip}</div>
                 <div class="card-value">${pct == null ? '—' : pct.toFixed(0) + '%'}</div>
                 <div class="meter"><i class="${pct > 90 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
             </div>`;
@@ -529,7 +531,7 @@
         if (e.kind === 'cpu') {
             const pct = v[0];
             return `<div class="card" data-eid="${e.id}">
-                <div class="card-title">${esc(e.name)}</div>
+                <div class="card-title">${esc(e.name)}${chip}</div>
                 <div class="card-value">${pct == null ? '—' : pct.toFixed(0) + '%'}</div>
                 <div class="meter"><i class="${pct > 85 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
             </div>`;
@@ -537,7 +539,7 @@
         const used = v[0], total = v[1];
         const pct = used != null && total > 0 ? used / total * 100 : null;
         return `<div class="card" data-eid="${e.id}">
-            <div class="card-title">${esc(e.name)}</div>
+            <div class="card-title">${esc(e.name)}${chip}</div>
             <div class="card-value">${pct == null ? '—' : pct.toFixed(0) + '%'}</div>
             <div class="card-sub">${fmtBytes(used)} of ${fmtBytes(total)}</div>
             <div class="meter"><i class="${pct > 90 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
@@ -550,18 +552,25 @@
         const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization' };
         const sensors = entities.filter((e) => e.kind !== 'if');
         $modal.innerHTML = `
-        <h2>Sensors <span class="muted small">checked = polled &amp; shown</span></h2>
+        <h2>Sensors</h2>
+        <div class="muted small" style="margin-bottom:8px">
+            <strong>T</strong>rack = poll &amp; graph · <strong>E</strong>xport = publish to snmp-status.json
+            (the code chip is the key external dashboards reference)</div>
         ${Object.entries(kinds).map(([kind, label]) => {
             const list = sensors.filter((e) => e.kind === kind);
             return list.length === 0 ? '' : `
             <div class="inv-group"><h4>${label} (${list.length})</h4>
             <div class="inv-scroll">
             ${list.map((e) => `
-                <label class="inv-row">
-                    <input type="checkbox" data-eid="${e.id}" data-was="${e.tracked ? 1 : 0}" ${e.tracked ? 'checked' : ''}>
+                <div class="inv-row">
+                    <input type="checkbox" class="ms-track" title="Track: poll and graph this sensor"
+                        data-eid="${e.id}" data-was="${e.tracked ? 1 : 0}" ${e.tracked ? 'checked' : ''}>
+                    <input type="checkbox" class="ms-export" title="Export to snmp-status.json"
+                        data-eid="${e.id}" data-was="${e.export ? 1 : 0}" ${e.export ? 'checked' : ''} ${e.tracked ? '' : 'disabled'}>
                     <span class="grow">${esc(e.name)}</span>
+                    ${e.code ? `<span class="code-chip">${esc(e.code)}</span>` : ''}
                     ${e.latest && e.latest.v[0] != null && kind === 'temp' ? `<span class="muted small">${e.latest.v[0].toFixed(1)}°C</span>` : ''}
-                </label>`).join('')}
+                </div>`).join('')}
             </div></div>`;
         }).join('')}
         <div class="form-actions">
@@ -570,12 +579,20 @@
             <span class="error-text" id="ms-err"></span>
         </div>`;
         $modal.showModal();
+        for (const t of $modal.querySelectorAll('.ms-track')) {
+            t.addEventListener('change', () => {
+                const ex = $modal.querySelector(`.ms-export[data-eid="${t.dataset.eid}"]`);
+                ex.disabled = !t.checked;
+                if (!t.checked) ex.checked = false;
+            });
+        }
         document.getElementById('ms-cancel').addEventListener('click', () => $modal.close());
         document.getElementById('ms-save').addEventListener('click', async () => {
             try {
-                for (const cb of $modal.querySelectorAll('input[data-eid]')) {
-                    if (cb.checked !== (cb.dataset.was === '1')) {
-                        await api('PATCH', `/api/entities/${cb.dataset.eid}`, { tracked: cb.checked });
+                for (const t of $modal.querySelectorAll('.ms-track')) {
+                    const ex = $modal.querySelector(`.ms-export[data-eid="${t.dataset.eid}"]`);
+                    if (t.checked !== (t.dataset.was === '1') || ex.checked !== (ex.dataset.was === '1')) {
+                        await api('PATCH', `/api/entities/${t.dataset.eid}`, { tracked: t.checked, export: ex.checked });
                     }
                 }
                 $modal.close();
@@ -593,6 +610,9 @@
             <span><input type="number" id="e-interval" min="30" style="width:110px" value="${d.pollIntervalS || ''}" placeholder="global"> seconds (blank = global ${d.effectiveIntervalS}s)</span>
             <label>Polling</label>
             <label><input type="checkbox" id="e-enabled" ${d.enabled ? 'checked' : ''}> enabled</label>
+            <label>Uptime</label>
+            <label><input type="checkbox" id="e-uptime" ${d.exportUptime ? 'checked' : ''}> export to snmp-status.json
+                ${d.uptimeCode ? `<span class="code-chip">${esc(d.uptimeCode)}</span>` : ''}</label>
             <label style="align-self:start">Notes</label>
             <textarea id="e-notes" rows="3" placeholder="anything worth remembering about this device">${esc(d.notes)}</textarea>
         </div>
@@ -611,6 +631,7 @@
                     name: document.getElementById('e-name').value,
                     pollIntervalS: document.getElementById('e-interval').value || null,
                     enabled: document.getElementById('e-enabled').checked,
+                    exportUptime: document.getElementById('e-uptime').checked,
                     notes: document.getElementById('e-notes').value
                 });
                 $modal.close();
