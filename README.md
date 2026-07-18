@@ -6,15 +6,17 @@
 
 SNMPCanvas polls interface traffic, CPU, memory, storage, temperatures, and
 fans on an interval you choose, keeps a configurable window of history, and
-draws the graphs. It is the third member of the Canvas family:
+draws the graphs. It is part of the Canvas family:
 [**CrossCanvas**](https://github.com/RootSwitch/CrossCanvas) draws your
 network, [**PingCanvas**](https://github.com/RootSwitch/PingCanvas) turns
 those diagrams into a live reachability wall, and SNMPCanvas adds the
 performance history - including an export file PingCanvas reads directly,
 overlaying live values onto board labels and connections (schema below).
+A fourth sibling, [**SyslogCanvas**](https://github.com/RootSwitch/SyslogCanvas),
+collects syslog and SNMP traps from the same gear.
 
-Unlike its sisters, SNMPCanvas has a backend: polling needs a process that
-outlives a browser tab, and history needs somewhere to live. The family's
+Unlike CrossCanvas and PingCanvas, SNMPCanvas has a backend: polling needs
+a process that outlives a browser tab, and history needs somewhere to live. The family's
 small-footprint ethos carries over all the same - one container, one SQLite
 file, two runtime dependencies, and a frontend that is still plain
 HTML/CSS/JS with no build step.
@@ -422,7 +424,7 @@ sister project.
 
 ## License
 
-[The Unlicense](LICENSE) - public domain, same as CrossCanvas and
-PingCanvas. Use it, fork it, ship it at work, no attribution required.
+[The Unlicense](LICENSE) - public domain, same as CrossCanvas, PingCanvas,
+and SyslogCanvas. Use it, fork it, ship it at work, no attribution required.
 (Dependencies keep their own MIT licenses in `node_modules/` when you
 install or ship an image.)
