@@ -33,28 +33,36 @@ function scheduleWrite() {
 
 function fmtUptime(sec) {
     const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
-    return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+    return d > 0 ? `up ${d}d ${h}h` : h > 0 ? `up ${h}h ${m}m` : `up ${m}m`;
 }
 
-// Per-kind display strings: VALUE-ONLY by convention (the board author
-// writes their own label around the {code} token — "CPU: {C1}" — which
-// keeps naming under their control and can never double). Kept SHORT for
-// label lines. A null value keeps the entry with "--" so an authored code
-// never looks like a typo.
+// Per-kind display strings, kept SHORT for label lines. A null value keeps
+// the entry with "--" so an authored code never looks like a typo.
 function metricDisplay(kind, name, v0, v1) {
-    if (v0 == null) return { display: '--', value: null };
+    if (v0 == null) {
+        return { display: kind === 'cpu' ? 'CPU --' : kind === 'mem' ? 'Mem --' : kind === 'fs' ? 'Disk --'
+                        : kind === 'fan' ? 'Fan --' : '--', value: null };
+    }
     switch (kind) {
-        case 'cpu': return { display: `${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
-        case 'mem':
+        case 'cpu': return { display: `CPU ${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
+        case 'mem': {
+            const pct = v1 > 0 ? v0 / v1 * 100 : null;
+            return pct == null ? { display: 'Mem --', value: null }
+                : { display: `Mem ${Math.round(pct)}%`, value: Math.round(pct), unit: '%' };
+        }
         case 'fs': {
             const pct = v1 > 0 ? v0 / v1 * 100 : null;
-            return pct == null ? { display: '--', value: null }
-                : { display: `${Math.round(pct)}%`, value: Math.round(pct), unit: '%' };
+            return pct == null ? { display: 'Disk --', value: null }
+                : { display: `Disk ${Math.round(pct)}%`, value: Math.round(pct), unit: '%' };
         }
         case 'temp': return { display: `${Math.round(v0)}C`, value: Math.round(v0), unit: 'C' };
-        case 'fan': return { display: `${Math.round(v0)}rpm`, value: Math.round(v0), unit: 'rpm' };
+        case 'fan': return { display: `Fan ${Math.round(v0)}rpm`, value: Math.round(v0), unit: 'rpm' };
         case 'power': return { display: v0 >= 100 ? `${Math.round(v0)}W` : `${v0.toFixed(1)}W`, value: v0, unit: 'W' };
-        case 'gauge': return { display: `${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
+        case 'gauge': {
+            // Entity names look like "Util: GPU" — reuse the suffix as the label.
+            const label = String(name || '').replace(/^Util:\s*/i, '').trim();
+            return { display: `${label ? label + ' ' : ''}${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
+        }
         default: return { display: String(v0), value: v0 };
     }
 }
