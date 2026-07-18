@@ -162,10 +162,19 @@ function write() {
         });
     }
 
+    // Advertise the poll cadence so the consumer's staleness threshold matches
+    // this instance's actual refresh rhythm. Without it the PingCanvas kiosk
+    // assumes 30s and grays the overlay permanently for any cadence over ~60s -
+    // and the default here is 300s. Use the slowest configured interval so a
+    // slow-polled device never false-flags the whole overlay as stale.
+    const globalInterval = parseInt(getSetting('poll_interval_s'), 10) || 300;
+    const maxDeviceInterval = db.prepare(
+        'SELECT MAX(poll_interval_s) AS m FROM devices WHERE poll_interval_s IS NOT NULL').get().m || 0;
     const doc = {
         schemaVersion: 2,
         generator: `snmpcanvas/${pkg.version}`,
         generatedAt: new Date().toISOString(),
+        pollIntervalSec: Math.max(globalInterval, maxDeviceInterval),
         interfaces,
         metrics
     };
