@@ -67,22 +67,44 @@ function serveStatic(req, res, pathname) {
 }
 
 const handler = async (req, res) => {
-    let url;
+    // The whole body is guarded: the handler is async, so any throw becomes an
+    // unhandled rejection, and on modern Node that exits the process - a
+    // malformed request (e.g. GET /%zz, whose decodeURIComponent throws
+    // URIError) must cost the client a 400, never cost us the server.
     try {
-        url = new URL(req.url, 'http://localhost');
-    } catch (_) {
-        res.writeHead(400); res.end(); return;
-    }
-    const pathname = decodeURIComponent(url.pathname);
+        let url, pathname;
+        try {
+            url = new URL(req.url, 'http://localhost');
+            pathname = decodeURIComponent(url.pathname);
+        } catch (_) {
+            res.writeHead(400); res.end(); return;
+        }
 
-    if (pathname.startsWith('/api/')) {
-        const handled = await api.handle(req, res, pathname, url.searchParams);
-        if (!handled) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"not found"}'); }
-        return;
+        if (pathname.startsWith('/api/')) {
+            const handled = await api.handle(req, res, pathname, url.searchParams);
+            if (!handled) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"not found"}'); }
+            return;
+        }
+        if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
+        serveStatic(req, res, pathname);
+    } catch (err) {
+        console.error(new Date().toISOString(), '[server] request error:', err);
+        try {
+            if (!res.headersSent) res.writeHead(500);
+            res.end();
+        } catch (_) { /* socket already gone */ }
     }
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
-    serveStatic(req, res, pathname);
 };
+
+// Last-resort net: log and keep serving. Polling and history collection must
+// survive a bug in one request path - crash-on-unknown is the wrong trade for
+// an unattended monitoring box.
+process.on('uncaughtException', (err) => {
+    console.error(new Date().toISOString(), '[server] uncaught exception:', err);
+});
+process.on('unhandledRejection', (err) => {
+    console.error(new Date().toISOString(), '[server] unhandled rejection:', err);
+});
 
 const server = tlsOptions ? https.createServer(tlsOptions, handler) : http.createServer(handler);
 

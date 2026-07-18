@@ -9,7 +9,10 @@ const { db, getSetting, setSetting } = require('./db');
 const SCRYPT = { N: 16384, r: 8, p: 1 };
 const SESSION_TTL_S = 30 * 24 * 3600;       // 30 days, sliding
 const SESSION_REFRESH_S = 15 * 24 * 3600;   // refresh when less than this remains
-const COOKIE_NAME = 'sc';
+// Namespaced per app: cookies ignore ports, so SNMPCanvas and SyslogCanvas on
+// the same host (the obvious suite deployment) would clobber each other's
+// sessions if both used a generic name.
+const COOKIE_NAME = 'snmpc_session';
 
 function hashPassword(password) {
     const salt = crypto.randomBytes(16);
@@ -83,7 +86,12 @@ function parseCookies(req) {
     if (!header) return out;
     for (const part of header.split(';')) {
         const eq = part.indexOf('=');
-        if (eq > 0) out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
+        if (eq > 0) {
+            // A malformed value (Cookie: x=%) makes decodeURIComponent throw;
+            // skip the pair rather than let it take down the request.
+            try { out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim()); }
+            catch (_) { /* ignore undecodable cookie */ }
+        }
     }
     return out;
 }
