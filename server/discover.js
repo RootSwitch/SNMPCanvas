@@ -332,10 +332,10 @@ async function probe(target) {
             // Index is the extend name as a length-prefixed ASCII string.
             const parts = idx.split('.').map(Number);
             const name = String.fromCharCode(...parts.slice(1, 1 + parts[0]));
-            const m = /^(temp|fan|power|util)-(.+)$/i.exec(name);
+            const m = /^(temp|fan|power|util|batt|runtime)-(.+)$/i.exec(name);
             if (!m) continue;
-            const kind = { temp: 'temp', fan: 'fan', power: 'power', util: 'gauge' }[m[1].toLowerCase()];
-            const label = { temp: 'Temp', fan: 'Fan', power: 'Power', gauge: 'Util' }[kind];
+            const kind = { temp: 'temp', fan: 'fan', power: 'power', util: 'gauge', batt: 'battery', runtime: 'runtime' }[m[1].toLowerCase()];
+            const label = { temp: 'Temp', fan: 'Fan', power: 'Power', gauge: 'Util', battery: 'Batt', runtime: 'Runtime' }[kind];
             const value = parseFloat(String(rawValue));
             entities.push({
                 kind,

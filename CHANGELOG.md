@@ -24,6 +24,11 @@
   **ASRock Rack BMC sensor table** (AMI MegaRAC IPMI firmware), which also
   feeds temperatures; sensors reading "Not Available" (host powered off,
   unpopulated headers) are listed but untracked by default.
+- **Battery and runtime kinds** for UPS monitoring via the `extend`
+  convention (`batt-` = charge percent, `runtime-` = seconds remaining):
+  battery cards alarm low (red at 20%), runtime displays humanize, and
+  exported battery metrics carry a forward-safe ok/warn/crit status. NUT's
+  `upsc` is the canonical source for USB UPSes.
 - **Code chips are paste-ready `{code}` tokens** (the PingCanvas board
   syntax) and copy themselves to the clipboard on click - including in the
   interface table, where clicking a chip no longer navigates to the detail

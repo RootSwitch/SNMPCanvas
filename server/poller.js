@@ -145,7 +145,7 @@ async function pollDevice(device) {
                 }
             } else if (e.kind === 'cpu') {
                 (extra.oids || []).forEach((oid, n) => { oids[`load${n}`] = oid; });
-            } else if (e.kind === 'temp' || e.kind === 'fan' || e.kind === 'power' || e.kind === 'gauge') {
+            } else if (['temp', 'fan', 'power', 'gauge', 'battery', 'runtime'].includes(e.kind)) {
                 oids.value = extra.valueOid;
             } else if (extra.style === 'used-free') {
                 oids.used = extra.usedOid;
@@ -230,9 +230,13 @@ async function pollDevice(device) {
                 const w = sensorRaw(job.extra, values.get(job.oids.value));
                 v[0] = (w != null && w >= 0 && w < 1e6) ? w : null;
                 updates.push({ id: e.id, poll_state: null });
-            } else if (e.kind === 'gauge') {
+            } else if (e.kind === 'gauge' || e.kind === 'battery') {
                 const pct = sensorRaw(job.extra, values.get(job.oids.value));
                 v[0] = (pct != null && pct >= 0 && pct <= 100) ? pct : null;
+                updates.push({ id: e.id, poll_state: null });
+            } else if (e.kind === 'runtime') {
+                const sec = sensorRaw(job.extra, values.get(job.oids.value));
+                v[0] = (sec != null && sec >= 0 && sec < 1e7) ? sec : null;
                 updates.push({ id: e.id, poll_state: null });
             } else if (job.extra.style === 'used-free') {
                 const used = numOrNull(values.get(job.oids.used));

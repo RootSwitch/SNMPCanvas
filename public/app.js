@@ -351,8 +351,8 @@
 
     function renderInventory(r) {
         const inv = document.getElementById('inventory');
-        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization' };
-        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [], fan: [], power: [], gauge: [] };
+        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime' };
+        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [], fan: [], power: [], gauge: [], battery: [], runtime: [] };
         for (const e of r.entities) byKind[e.kind]?.push(e);
 
         inv.innerHTML = `
@@ -563,6 +563,23 @@
                 <div class="meter"><i class="${pct > 90 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
             </div>`;
         }
+        if (e.kind === 'battery') {
+            const pct = v[0];
+            // Batteries alarm LOW: red meter at 20% and below.
+            return `<div class="card" data-eid="${e.id}">
+                <div class="card-title">${esc(e.name)}${chip}</div>
+                <div class="card-value">${pct == null ? '-' : pct.toFixed(0) + '%'}</div>
+                <div class="meter"><i class="${pct != null && pct <= 20 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
+            </div>`;
+        }
+        if (e.kind === 'runtime') {
+            const sec = v[0];
+            return `<div class="card" data-eid="${e.id}">
+                <div class="card-title">${esc(e.name)}${chip}</div>
+                <div class="card-value">${sec == null ? '-' : Charts.fmtValue(sec, 'dur')}</div>
+                <div class="meter"><i class="${sec != null && sec <= 300 ? 'hot' : ''}" style="width:${Math.min(100, (sec || 0) / 36)}%"></i></div>
+            </div>`;
+        }
         if (e.kind === 'cpu') {
             const pct = v[0];
             return `<div class="card" data-eid="${e.id}">
@@ -584,7 +601,7 @@
     // Track/untrack CPU, memory, storage, and temperature sensors after the
     // add-device wizard (interfaces have their own Track column).
     function manageSensorsModal(deviceId, entities) {
-        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization' };
+        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime' };
         const sensors = entities.filter((e) => e.kind !== 'if');
         $modal.innerHTML = `
         <h2>Sensors</h2>
@@ -790,12 +807,20 @@
                     { label: 'Watts (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
-        } else if (kind === 'gauge') {
-            chartBlock(wrap, 'Utilization', {
+        } else if (kind === 'gauge' || kind === 'battery') {
+            chartBlock(wrap, kind === 'battery' ? 'Battery charge' : 'Utilization', {
                 ...opts, unit: 'pct', yMax: 100,
                 series: [
                     { label: '% (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
                     { label: '% (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                ]
+            });
+        } else if (kind === 'runtime') {
+            chartBlock(wrap, 'Runtime remaining', {
+                ...opts, unit: 'dur',
+                series: [
+                    { label: 'Runtime (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
+                    { label: 'Runtime (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else {

@@ -39,7 +39,7 @@ function fmtUptime(sec) {
 // Per-kind display strings, kept SHORT for label lines. A null value keeps
 // the entry with "--" so an authored code never looks like a typo.
 function metricDisplay(kind, name, v0, v1) {
-    const NULL_LABEL = { cpu: 'CPU', mem: 'Mem', fs: 'Disk', temp: 'Temp', fan: 'Fan', power: 'Power' };
+    const NULL_LABEL = { cpu: 'CPU', mem: 'Mem', fs: 'Disk', temp: 'Temp', fan: 'Fan', power: 'Power', battery: 'Batt', runtime: 'Runtime' };
     if (v0 == null) {
         const label = kind === 'gauge' ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
         return { display: `${label ? label + ' ' : ''}--`, value: null };
@@ -59,6 +59,13 @@ function metricDisplay(kind, name, v0, v1) {
         case 'temp': return { display: `Temp ${Math.round(v0)}C`, value: Math.round(v0), unit: 'C' };
         case 'fan': return { display: `Fan ${Math.round(v0)}rpm`, value: Math.round(v0), unit: 'rpm' };
         case 'power': return { display: `Power ${v0 >= 100 ? Math.round(v0) : v0.toFixed(1)}W`, value: v0, unit: 'W' };
+        case 'battery': return { display: `Batt ${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
+        case 'runtime': {
+            const d = v0 >= 86400 ? `${Math.floor(v0 / 86400)}d ${Math.floor(v0 % 86400 / 3600)}h`
+                : v0 >= 3600 ? `${Math.floor(v0 / 3600)}h ${Math.round(v0 % 3600 / 60)}m`
+                : `${Math.round(v0 / 60)}m`;
+            return { display: `Runtime ${d}`, value: Math.round(v0), unit: 's' };
+        }
         case 'gauge': {
             // Entity names look like "Util: GPU" - reuse the suffix as the label.
             const label = String(name || '').replace(/^Util:\s*/i, '').trim();
@@ -130,6 +137,11 @@ function write() {
         };
         if (fmt.unit) out.unit = fmt.unit;
         if (r.kind === 'cpu') out.status = cpuStatus(v0);
+        // Forward-safe per the kiosk contract: it ignores status on non-cpu
+        // kinds today, but battery is the likely next coloring gate.
+        if (r.kind === 'battery') {
+            out.status = v0 == null ? 'unknown' : v0 <= 20 ? 'crit' : v0 <= 50 ? 'warn' : 'ok';
+        }
         return out;
     });
 

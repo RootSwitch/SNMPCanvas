@@ -322,7 +322,8 @@ cards - interfaces still work fully.
 Anything a shell command can print becomes a sensor. On the monitored host,
 add `extend` directives to `/etc/snmp/snmpd.conf` whose **names pick the
 kind by prefix** - `temp-` (°C), `fan-` (RPM), `power-` (watts), `util-`
-(percent) - and whose output is a single number:
+(percent), `batt-` (battery charge %), `runtime-` (seconds remaining) - and
+whose output is a single number:
 
 ```
 extend temp-GPU   /usr/bin/nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits
@@ -333,10 +334,24 @@ extend util-GPU   /usr/bin/nvidia-smi --query-gpu=utilization.gpu --format=csv,n
 Restart snmpd, rediscover the device, and the outputs appear as sensor
 cards with history. This is the doorway for data SNMP can't see natively:
 NVIDIA GPUs (no hwmon - AMD GPUs surface through lm-sensors automatically),
-UPS runtime, anything scriptable. The command runs under the *agent's*
+USB UPSes, anything scriptable. The command runs under the *agent's*
 account on the monitored host - SNMPCanvas only ever reads the published
 number. (NVIDIA note: `fan.speed` reports percent, not RPM - name it
 `util-GPU-Fan`, not `fan-`.)
+
+A USB UPS via [NUT](https://networkupstools.org/) is the canonical battery
+example - `upsc` already prints bare numbers:
+
+```
+extend batt-UPS1    /usr/bin/upsc ups battery.charge
+extend runtime-UPS1 /usr/bin/upsc ups battery.runtime
+extend util-UPS1-Load /usr/bin/upsc ups ups.load
+```
+
+Battery cards alarm LOW (red at 20% and below), runtime displays humanize
+(`Runtime 1h 0m`), and exported battery metrics carry an ok/warn/crit
+`status` - forward-safe under the kiosk contract, which ignores status on
+non-CPU kinds until a coloring gate opens.
 
 If a device renumbers its `ifIndex`es (some do, after reboots or module
 changes), affected interfaces are flagged **stale** in the UI; use

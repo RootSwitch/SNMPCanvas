@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS credentials (
 CREATE TABLE IF NOT EXISTS entities (
   id           INTEGER PRIMARY KEY,
   device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge')),
+  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge','battery','runtime')),
   snmp_index   TEXT NOT NULL,
   name         TEXT,
   alias        TEXT,
@@ -141,14 +141,14 @@ if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code 
 // SQLite can't alter a CHECK, so databases created before the newest kind
 // get a one-time table rebuild (ids preserved - samples reference them).
 const entitySql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entities'").get().sql;
-if (!entitySql.includes("'power'")) {
+if (!entitySql.includes("'battery'")) {
     db.pragma('foreign_keys = OFF');
     db.transaction(() => {
         db.exec(`
             CREATE TABLE entities_migrate (
               id           INTEGER PRIMARY KEY,
               device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge')),
+              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge','battery','runtime')),
               snmp_index   TEXT NOT NULL,
               name         TEXT,
               alias        TEXT,
