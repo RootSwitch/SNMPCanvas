@@ -905,6 +905,16 @@
                 SNMP credentials in the backup are unencrypted (set SNMPCANVAS_SECRET to change that) - store the file accordingly.</div>`}
             <a class="btn" href="/api/backup" download>Download database backup</a>
         </div>
+        <div class="panel">
+            <h2>Inventory export</h2>
+            <div class="muted small" style="margin-bottom:8px">
+                Downloads your monitored devices as a CSV ready to import into
+                <b>CrossCanvas</b> (File &rarr; Import inventory). Each device arrives with its
+                name, IP address and description; devices with an IP are monitoring-ready in
+                PingCanvas straight away. A best-effort stencil is guessed from each device's
+                SNMP description - adjust any in the editor after import.</div>
+            <a class="btn" href="/api/inventory.csv" download>Export inventory (CrossCanvas CSV)</a>
+        </div>
         <div class="panel muted small">
             Data directory: <code>${esc(s.dataDir)}</code><br>
             SNMP credential encryption at rest: ${s.credentialEncryption ? '<span class="ok-text">enabled</span>' : 'disabled (set SNMPCANVAS_SECRET to enable)'}

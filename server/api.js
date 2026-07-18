@@ -12,6 +12,7 @@ const auth = require('./auth');
 const discover = require('./discover');
 const poller = require('./poller');
 const exporter = require('./exporter');
+const inventory = require('./inventory');
 
 // Reject an export path that would let an authenticated user overwrite the
 // application's own files (e.g. public/app.js). The exporter writes JSON here
@@ -382,6 +383,20 @@ const routes = [
             kind: e.kind, name: e.name, code: e.code || null, speedBps: e.speed_bps, bucketSec: bucket, from, to, p95,
             points: rows.map((r) => [r.t, r.a0, r.m0, r.a1, r.m1, r.a2, r.a3, r.a4, r.a5, r.st])
         });
+    } },
+
+    // Device inventory as a CrossCanvas-import CSV, so a monitored fleet can
+    // seed a diagram in one step (an IP-Address makes each device
+    // monitoring-ready in PingCanvas).
+    { method: 'GET', path: /^\/api\/inventory\.csv$/, handler: (req, res) => {
+        const csv = inventory.buildCsv();
+        const stamp = new Date().toISOString().slice(0, 10);
+        res.writeHead(200, {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="snmpcanvas-inventory-${stamp}.csv"`,
+            'Cache-Control': 'no-store'
+        });
+        res.end(csv);
     } },
 
     // Consistent snapshot of the database, streamed as a download.
