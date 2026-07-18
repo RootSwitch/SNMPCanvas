@@ -3,5 +3,5 @@ data/
 *.log
 .DS_Store
 # per-host deployment customizations (volumes, env) live here, not in the
-# tracked compose file — Docker Compose merges it automatically
+# tracked compose file - Docker Compose merges it automatically
 docker-compose.override.yml

@@ -39,7 +39,7 @@ const mib = agent.getMib();
 
 // --- system group ---
 const scalars = [
-    ['sysDescr', '1.3.6.1.2.1.1.1', OT.OctetString, 'SNMPCanvas mock agent — Linux mocklab 6.6.0 x86_64'],
+    ['sysDescr', '1.3.6.1.2.1.1.1', OT.OctetString, 'SNMPCanvas mock agent - Linux mocklab 6.6.0 x86_64'],
     ['sysObjectID', '1.3.6.1.2.1.1.2', OT.OID, '1.3.6.1.4.1.8072.3.2.10'],
     ['sysUpTime', '1.3.6.1.2.1.1.3', OT.TimeTicks, 0],
     ['sysContact', '1.3.6.1.2.1.1.4', OT.OctetString, 'lab@example.net'],
@@ -146,4 +146,4 @@ setInterval(() => {
     mib.setTableSingleCell('hrProcessorTable', 2, [196609], Math.max(2, Math.min(98, 9 + Math.floor(Math.random() * 16 - 8))));
 }, 5000);
 
-console.log(`mock SNMP agent on udp/${PORT} — v2c community "public", v3 user "labuser" (authPriv, SHA-1/"authpass123", AES-128/"privpass123")`);
+console.log(`mock SNMP agent on udp/${PORT} - v2c community "public", v3 user "labuser" (authPriv, SHA-1/"authpass123", AES-128/"privpass123")`);

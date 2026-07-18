@@ -1,5 +1,5 @@
 'use strict';
-// Entry point: plain node:http — a URL parse, the /api dispatch, and a static
+// Entry point: plain node:http - a URL parse, the /api dispatch, and a static
 // file server for public/. No framework; the whole request path is this file.
 
 const http = require('node:http');
@@ -12,7 +12,7 @@ const auth = require('./auth');
 const api = require('./api');
 const poller = require('./poller');
 
-// Default port 9161 ("161" for SNMP) — deliberately clear of the usual
+// Default port 9161 ("161" for SNMP) - deliberately clear of the usual
 // home-lab suspects (UptimeKuma 3001, CrossCanvas/PingCanvas 8080/8443).
 const PORT = parseInt(process.env.PORT || '9161', 10);
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -30,9 +30,9 @@ if (fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) {
         if (process.env.COOKIE_SECURE === undefined) process.env.COOKIE_SECURE = '1';
     } catch (err) {
         // Unreadable cert (usually file ownership: the container runs as uid
-        // 1000) — stay up on HTTP rather than crashlooping.
+        // 1000) - stay up on HTTP rather than crashlooping.
         console.error(new Date().toISOString(),
-            `[server] TLS cert found but unreadable (${err.message}) — falling back to HTTP. ` +
+            `[server] TLS cert found but unreadable (${err.message}) - falling back to HTTP. ` +
             'Fix ownership: chown -R 1000:1000 data/certs');
         tlsOptions = null;
     }
@@ -96,7 +96,7 @@ server.listen(PORT, () => {
 
 // Docker sends SIGTERM on stop: close cleanly so WAL merges back into the db.
 function shutdown(signal) {
-    console.log(new Date().toISOString(), `[server] ${signal} — shutting down`);
+    console.log(new Date().toISOString(), `[server] ${signal} - shutting down`);
     poller.stop();
     server.close(() => {
         try { db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); } catch (_) { /* best effort */ }

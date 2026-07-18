@@ -24,10 +24,22 @@
   **ASRock Rack BMC sensor table** (AMI MegaRAC IPMI firmware), which also
   feeds temperatures; sensors reading "Not Available" (host powered off,
   unpopulated headers) are listed but untracked by default.
+- **Code chips are paste-ready `{code}` tokens** (the PingCanvas board
+  syntax) and copy themselves to the clipboard on click - including in the
+  interface table, where clicking a chip no longer navigates to the detail
+  view.
+- **All 29 CrossCanvas themes** now carry over, grouped as in its picker
+  (Paper / Warm / Cool / Night / Screen); previously 21.
+- Temperature and power metric displays carry their name prefix
+  (`Temp 42C`, `Power 9.5W`) like every other kind, so bare `{code}`
+  tokens self-label consistently.
+- README: documents the `{code}` brace rule for PingCanvas boards, the
+  cleartext nature of SNMPv1/v2c, the first-run setup-page claim window,
+  and that unencrypted backups contain credentials.
 - 95th-percentile chart labels no longer overlap when the in/out values
   nearly coincide.
 
-## 0.1.0 — 2026-07-17
+## 0.1.0 - 2026-07-17
 
 Initial release.
 
@@ -39,7 +51,7 @@ Initial release.
   walks ifTable/ifXTable, HOST-RESOURCES (CPU / memory / filesystems),
   temperature sensors (LM-SENSORS-MIB, ENTITY-SENSOR-MIB, vendor health
   OIDs), and an extensible sysObjectID-keyed vendor map (Cisco CPU/memory/
-  ENVMON, MikroTik health). No MIB files — numeric OIDs only. SNMPv1
+  ENVMON, MikroTik health). No MIB files - numeric OIDs only. SNMPv1
   GetNext fallback for agents that ignore GetBulk. Curated noise defaults:
   loopbacks, container/hypervisor plumbing (veth/tap/fwbr), tmpfs and ZFS
   snapshot mounts, redundant per-core temps, and implausible sensor

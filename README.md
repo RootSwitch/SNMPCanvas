@@ -4,16 +4,14 @@
 > networks: poll your devices over SNMPv2c/v3, keep the history in SQLite,
 > and browse it in a dependency-light web UI.
 
-SNMPCanvas answers two questions about the gear you already have: *how is it
-doing right now*, and *what was it doing last night when things got weird*.
-It polls interface traffic, CPU, memory, storage, and temperatures on an
-interval you choose, keeps a configurable window of history, and draws the
-graphs. It is the third member of the Canvas family:
+SNMPCanvas polls interface traffic, CPU, memory, storage, temperatures, and
+fans on an interval you choose, keeps a configurable window of history, and
+draws the graphs. It is the third member of the Canvas family:
 [**CrossCanvas**](https://github.com/RootSwitch/CrossCanvas) draws your
 network, [**PingCanvas**](https://github.com/RootSwitch/PingCanvas) turns
 those diagrams into a live reachability wall, and SNMPCanvas adds the
-performance history - including an export file that PingCanvas-style
-dashboards can ingest (schema below).
+performance history - including an export file PingCanvas reads directly,
+overlaying live values onto board labels and connections (schema below).
 
 Unlike its sisters, SNMPCanvas has a backend: polling needs a process that
 outlives a browser tab, and history needs somewhere to live. The family's
@@ -65,8 +63,8 @@ written to a small JSON status file every cycle, for other tools to read.
   entity per day.
 - **Single shared password** for the UI (scrypt-hashed), sessions, login
   rate limiting, and one-click database backups from the Settings page.
-- **21 themes** carried over from CrossCanvas's palette family, grouped the
-  same way.
+- **29 themes** carried over from CrossCanvas's palette family, grouped the
+  same way (Paper / Warm / Cool / Night / Screen).
 
 ## Small on purpose
 
@@ -101,7 +99,13 @@ docker compose up -d
 Open `http://host:9161`, set the admin password on the first-run page, and
 add a device. That's the whole install. (The default port is a nod to SNMP's
 UDP/161, picked to coexist quietly with common home-lab neighbors like
-UptimeKuma on 3001 and CrossCanvas/PingCanvas on 8080/8443.)
+Uptime Kuma on 3001 and CrossCanvas/PingCanvas on 8080/8443.)
+
+Two first-run notes: the setup page belongs to whoever reaches the port
+first, so on anything but a trusted segment either set `ADMIN_PASSWORD` in
+the compose file or claim the page immediately after `up -d`. And the
+add-device form defaults to SNMPv2c, which is a cleartext protocol - see
+Security posture below.
 
 ### HTTPS
 
@@ -168,8 +172,8 @@ Node 20+: `npm install && npm start` (listens on `:9161`, data in `./data`).
 | `PORT` | `9161` | HTTP/HTTPS listen port |
 | `SNMPCANVAS_DATA` | `/data` | Directory for the SQLite db, certs, and default export file |
 | `TLS_CERT` / `TLS_KEY` | `$DATA/certs/server.crt|key` | PEM cert/key pair; HTTPS turns on when both exist |
-| `ADMIN_PASSWORD` | – | Pre-set the UI password (otherwise first-run setup page) |
-| `SNMPCANVAS_SECRET` | – | If set, SNMP credentials are AES-256-GCM encrypted at rest |
+| `ADMIN_PASSWORD` | - | Pre-set the UI password (otherwise first-run setup page) |
+| `SNMPCANVAS_SECRET` | - | If set, SNMP credentials are AES-256-GCM encrypted at rest |
 | `POLL_CONCURRENCY` | `4` | Max devices polled simultaneously |
 | `COOKIE_SECURE` | auto | `Secure` cookies: on with HTTPS, off with HTTP; set to override |
 | `TZ` | UTC | Timezone for the nightly prune and log timestamps |
@@ -181,14 +185,24 @@ Polling interval, retention days, and the export path are set in the UI
 
 SNMPCanvas is a networked app with a small, deliberate threat model:
 
+- **SNMPv1/v2c has no encryption and no real authentication**: the
+  community string travels in cleartext in every packet, and so does
+  everything it returns. Use v3 with authPriv where the device supports it,
+  restrict SNMP by source address on the device, and keep polling traffic
+  on a trusted VLAN. Never expose the poller or the monitored agents to the
+  internet.
 - SNMP credentials are stored in the SQLite database because the poller
   sends them on every cycle. By default the protection is filesystem
   permissions on the `/data` volume; set `SNMPCANVAS_SECRET` and they are
   AES-256-GCM encrypted with a key derived from your secret instead (lose
-  the secret, re-enter the credentials).
+  the secret, re-enter the credentials). The same applies to **database
+  backups** downloaded from Settings: without `SNMPCANVAS_SECRET`, the
+  `.db` file carries every community string and v3 key in the clear -
+  treat it accordingly.
 - The web UI has one shared password and is designed for a trusted network
   segment; a reverse proxy adds TLS termination and extra auth cleanly if
-  you want to go further.
+  you want to go further. The first-run setup page belongs to whoever
+  reaches it first - claim it promptly or pre-set `ADMIN_PASSWORD`.
 - SNMP polls leave the container as outbound UDP/161 through Docker's NAT,
   so devices see the **docker host's** IP. If your devices restrict SNMP by
   source address, allow the host IP - or run the container with
@@ -208,7 +222,7 @@ PingCanvas can stay a dumb "code -> text" swapper:
   "schemaVersion": 2,
   "interfaces": [ ... ],
   "metrics": [
-    { "code": "C1", "kind": "cpu", "host": "compute-01",
+    { "code": "H4TN", "kind": "cpu", "host": "compute-01",
       "display": "CPU 45%", "value": 45, "unit": "%", "status": "ok",
       "sampledAt": "2026-07-17T01:10:42Z" }
   ]
@@ -220,7 +234,13 @@ Only `kind:"cpu"` carries a coloring `status` (`ok` under 85%, `warn` to
 number without screaming about it. Unavailable values keep their entry with
 `display: "--"`. Export checkboxes live in the interface table (interfaces),
 the **Sensors** dialog (everything else), and the device **Edit** dialog
-(uptime); each exported item shows its code chip in the UI.
+(uptime); each exported item shows its code chip in the UI, already wrapped
+in braces and copied to the clipboard on click.
+
+On a PingCanvas board, wrap the code in braces - `{K7Q2}` - in a device
+label line or a connection annotation. Braces are required on labels and
+optional on annotations, so the braced form always works; text around the
+token is the board author's own (`Rx {K7Q2}` renders as `Rx ▼56M ▲32M`).
 
 The v1 `interfaces[]` shape is unchanged:
 
@@ -257,12 +277,12 @@ metadata is retained while a device is down so a dashboard can grey the tile
 out instead of losing it.
 
 `code` is a short, stable key for consumers that don't want to type the full
-`id`: 4+ characters derived from `md5(deviceName:ifName)` (confusable
-characters excluded, lengthened only on hash collision), minted once and
-stored with the interface. It survives un-export/re-export, rediscovery, and
-even deleting and re-adding a device - the same device and interface names
-produce the same code. Each interface shows its code in the UI on the device
-page.
+`id` - and interfaces, sensors, and uptime all mint the same kind of code:
+4+ characters (uppercase, confusables like 0/O and 1/I excluded) derived
+from `md5(deviceName:entityName)`, lengthened only on hash collision, minted
+once and stored. A code survives un-export/re-export, rediscovery, and even
+deleting and re-adding a device - the same device and entity names produce
+the same code. Every code shows as a clickable chip in the UI.
 
 Because the export path defaults to `/data/snmp-status.json` and `/data` is
 a bind mount, the file lands **on the docker host** - another container on

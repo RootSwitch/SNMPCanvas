@@ -1,6 +1,6 @@
 'use strict';
 // SNMPCanvas frontend: hash-routed views over the JSON API. Vanilla DOM, no
-// framework, no build step — the file you read is the file that runs.
+// framework, no build step - the file you read is the file that runs.
 
 (function () {
     const $main = document.getElementById('main');
@@ -38,14 +38,14 @@
 
     const OPER = { 1: 'up', 2: 'down', 3: 'testing', 4: 'unknown', 5: 'dormant', 6: 'notPresent', 7: 'lowerLayerDown' };
 
-    function fmtBps(v) { return v == null ? '—' : Charts.fmtValue(v, 'bps'); }
-    function fmtBytes(v) { return v == null ? '—' : Charts.fmtValue(v, 'bytes'); }
+    function fmtBps(v) { return v == null ? '-' : Charts.fmtValue(v, 'bps'); }
+    function fmtBytes(v) { return v == null ? '-' : Charts.fmtValue(v, 'bytes'); }
     function fmtSpeed(bps) {
-        if (!bps) return '—';
+        if (!bps) return '-';
         return bps >= 1e9 ? (bps / 1e9) + ' G' : bps >= 1e6 ? (bps / 1e6) + ' M' : (bps / 1e3) + ' k';
     }
     function fmtUptime(sec) {
-        if (sec == null) return '—';
+        if (sec == null) return '-';
         const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
         return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
     }
@@ -88,7 +88,7 @@
             const prev = chip.textContent;
             chip.textContent = 'copied';
             setTimeout(() => { chip.textContent = prev; chip.classList.remove('copied'); }, 700);
-        }).catch(() => { /* clipboard unavailable — token stays selectable */ });
+        }).catch(() => { /* clipboard unavailable - token stays selectable */ });
     }, true);
 
     function setAutoRefresh(fn, ms) {
@@ -102,7 +102,7 @@
         for (const a of $nav.querySelectorAll('a')) a.classList.toggle('active', a.dataset.nav === active);
     }
 
-    // ===== theme picker (grouped like CrossCanvas's — ungrouped Classic
+    // ===== theme picker (grouped like CrossCanvas's - ungrouped Classic
     // first, then an <optgroup> per vibe, in themes.js authoring order) =====
     const $theme = document.getElementById('theme-select');
     let optgroup = null;
@@ -158,7 +158,7 @@
                 <rect x="9" y="12" width="46" height="34" rx="3" fill="#f4f1ea" stroke-width="4"/>
                 <polyline points="13.5,30 20,30 23,25.5 26,30 31,30 34,18 38,40.5 41,30 44.5,27 47.5,30 50.5,30" stroke="var(--se-logo-b)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
             </svg> SNMPCanvas</h1>
-            <div class="sub">${needsSetup ? 'First run — choose an admin password (8+ characters).' : 'Enter the password to continue.'}</div>
+            <div class="sub">${needsSetup ? 'First run - choose an admin password (8+ characters).' : 'Enter the password to continue.'}</div>
             <form id="login-form">
                 <input type="password" id="pw" placeholder="Password" autofocus autocomplete="${needsSetup ? 'new-password' : 'current-password'}">
                 ${needsSetup ? '<input type="password" id="pw2" placeholder="Confirm password" autocomplete="new-password">' : ''}
@@ -214,7 +214,7 @@
             <button id="add-btn" class="btn-primary">+ Add device</button>
         </div>
         <div class="panel">
-        ${devices.length === 0 ? '<div class="muted">No devices yet — click <strong>Add device</strong> to poll your first one.</div>' : `
+        ${devices.length === 0 ? '<div class="muted">No devices yet - click <strong>Add device</strong> to poll your first one.</div>' : `
         <table class="list"><thead><tr>
             <th class="sortable" data-sort="status">Status${arrow('status')}</th>
             <th class="sortable" data-sort="name">Name${arrow('name')}</th>
@@ -368,7 +368,7 @@
         </div>
         ${Object.entries(groups).map(([kind, label]) => byKind[kind].length === 0 ? '' : `
         <div class="inv-group">
-            <h4>${label} (${byKind[kind].length})${kind === 'if' ? ' — checked = tracked' : ''}</h4>
+            <h4>${label} (${byKind[kind].length})${kind === 'if' ? ' - checked = tracked' : ''}</h4>
             <div class="inv-scroll">
             ${byKind[kind].map((e) => `
                 <label class="inv-row">
@@ -419,7 +419,7 @@
         const d = data.device;
         const cards = data.entities.filter((e) => e.kind !== 'if' && e.tracked);
         // Tracked interfaces first, then untracked (dimmed, poll-able via the
-        // Track checkbox — useful for opting into per-VM taps and the like).
+        // Track checkbox - useful for opting into per-VM taps and the like).
         const allIfs = data.entities.filter((e) => e.kind === 'if');
         const ifs = [...allIfs.filter((e) => e.tracked), ...allIfs.filter((e) => !e.tracked)];
         const trackedCount = allIfs.filter((e) => e.tracked).length;
@@ -458,14 +458,14 @@
                     <td><input type="checkbox" class="tracked-cb" data-eid="${e.id}" ${e.tracked ? 'checked' : ''}></td>
                     <td><input type="checkbox" class="export-cb" data-eid="${e.id}" ${e.export ? 'checked' : ''} ${e.tracked ? '' : 'disabled'}></td>
                     <td><span class="badge ${oper === 'up' ? 'up' : oper === 'down' ? 'down' : ''}">${oper}</span>
-                        ${e.stale ? '<span class="badge stale" title="ifIndex may have moved — rediscover this device">stale</span>' : ''}</td>
+                        ${e.stale ? '<span class="badge stale" title="ifIndex may have moved - rediscover this device">stale</span>' : ''}</td>
                     <td><strong>${esc(e.name)}</strong> ${codeChip(e.code)}</td>
                     <td class="muted hide-sm">${esc(e.alias)}</td>
                     <td class="num">${fmtSpeed(e.speedBps)}</td>
-                    <td class="num">${e.tracked ? fmtBps(v[0]) : '—'}</td>
-                    <td class="num">${e.tracked ? fmtBps(v[1]) : '—'}</td>
-                    <td class="num hide-sm">${e.tracked ? ((v[2] ?? 0) + (v[3] ?? 0)).toFixed(2).replace(/^0\.00$/, '0') : '—'}</td>
-                    <td class="num hide-sm">${e.tracked ? ((v[4] ?? 0) + (v[5] ?? 0)).toFixed(2).replace(/^0\.00$/, '0') : '—'}</td>
+                    <td class="num">${e.tracked ? fmtBps(v[0]) : '-'}</td>
+                    <td class="num">${e.tracked ? fmtBps(v[1]) : '-'}</td>
+                    <td class="num hide-sm">${e.tracked ? ((v[2] ?? 0) + (v[3] ?? 0)).toFixed(2).replace(/^0\.00$/, '0') : '-'}</td>
+                    <td class="num hide-sm">${e.tracked ? ((v[4] ?? 0) + (v[5] ?? 0)).toFixed(2).replace(/^0\.00$/, '0') : '-'}</td>
                 </tr>`;
             }).join('')}
             </tbody></table>`}
@@ -528,22 +528,22 @@
 
     function resourceCard(e) {
         const v = e.latest ? e.latest.v : [];
-        // Exported sensors wear their code chip — the key a dashboard binds to.
+        // Exported sensors wear their code chip - the key a dashboard binds to.
         const chip = e.export && e.code ? ' ' + codeChip(e.code) : '';
         if (e.kind === 'temp') {
             const c = v[0];
             return `<div class="card" data-eid="${e.id}">
                 <div class="card-title">${esc(e.name)}${chip}</div>
-                <div class="card-value">${c == null ? '—' : c.toFixed(1) + '°C'}</div>
+                <div class="card-value">${c == null ? '-' : c.toFixed(1) + '°C'}</div>
                 <div class="meter"><i class="${c >= 70 ? 'hot' : ''}" style="width:${Math.min(100, c || 0)}%"></i></div>
             </div>`;
         }
         if (e.kind === 'fan') {
             const rpm = v[0];
-            // A tracked fan reading 0 is the alarm case — paint it hot.
+            // A tracked fan reading 0 is the alarm case - paint it hot.
             return `<div class="card" data-eid="${e.id}">
                 <div class="card-title">${esc(e.name)}${chip}</div>
-                <div class="card-value">${rpm == null ? '—' : Math.round(rpm) + ' rpm'}</div>
+                <div class="card-value">${rpm == null ? '-' : Math.round(rpm) + ' rpm'}</div>
                 <div class="meter"><i class="${rpm === 0 ? 'hot' : ''}" style="width:${rpm === 0 ? 100 : Math.min(100, (rpm || 0) / 80)}%"></i></div>
             </div>`;
         }
@@ -551,7 +551,7 @@
             const w = v[0];
             return `<div class="card" data-eid="${e.id}">
                 <div class="card-title">${esc(e.name)}${chip}</div>
-                <div class="card-value">${w == null ? '—' : (w >= 1000 ? (w / 1000).toFixed(2) + ' kW' : w.toFixed(1) + ' W')}</div>
+                <div class="card-value">${w == null ? '-' : (w >= 1000 ? (w / 1000).toFixed(2) + ' kW' : w.toFixed(1) + ' W')}</div>
                 <div class="meter"><i style="width:${Math.min(100, (w || 0) / 10)}%"></i></div>
             </div>`;
         }
@@ -559,7 +559,7 @@
             const pct = v[0];
             return `<div class="card" data-eid="${e.id}">
                 <div class="card-title">${esc(e.name)}${chip}</div>
-                <div class="card-value">${pct == null ? '—' : pct.toFixed(0) + '%'}</div>
+                <div class="card-value">${pct == null ? '-' : pct.toFixed(0) + '%'}</div>
                 <div class="meter"><i class="${pct > 90 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
             </div>`;
         }
@@ -567,7 +567,7 @@
             const pct = v[0];
             return `<div class="card" data-eid="${e.id}">
                 <div class="card-title">${esc(e.name)}${chip}</div>
-                <div class="card-value">${pct == null ? '—' : pct.toFixed(0) + '%'}</div>
+                <div class="card-value">${pct == null ? '-' : pct.toFixed(0) + '%'}</div>
                 <div class="meter"><i class="${pct > 85 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
             </div>`;
         }
@@ -575,7 +575,7 @@
         const pct = used != null && total > 0 ? used / total * 100 : null;
         return `<div class="card" data-eid="${e.id}">
             <div class="card-title">${esc(e.name)}${chip}</div>
-            <div class="card-value">${pct == null ? '—' : pct.toFixed(0) + '%'}</div>
+            <div class="card-value">${pct == null ? '-' : pct.toFixed(0) + '%'}</div>
             <div class="card-sub">${fmtBytes(used)} of ${fmtBytes(total)}</div>
             <div class="meter"><i class="${pct > 90 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
         </div>`;
@@ -861,8 +861,10 @@
         <div class="panel">
             <h2>Backup</h2>
             <div class="muted small" style="margin-bottom:8px">
-                Downloads a consistent snapshot of the whole database — devices, credentials, settings, and all history.
+                Downloads a consistent snapshot of the whole database - devices, credentials, settings, and all history.
                 Restore by stopping SNMPCanvas and replacing <code>snmpcanvas.db</code> in the data directory with the snapshot.</div>
+            ${s.credentialEncryption ? '' : `<div class="warn-text small" style="margin-bottom:8px">
+                SNMP credentials in the backup are unencrypted (set SNMPCANVAS_SECRET to change that) - store the file accordingly.</div>`}
             <a class="btn" href="/api/backup" download>Download database backup</a>
         </div>
         <div class="panel muted small">

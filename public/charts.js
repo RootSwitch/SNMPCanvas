@@ -1,5 +1,5 @@
 'use strict';
-// Hand-rolled SVG time-series charts — no chart library. Colors come from CSS
+// Hand-rolled SVG time-series charts - no chart library. Colors come from CSS
 // classes bound to the --se-* theme variables, so charts re-theme instantly.
 //
 // Chart.render(container, {
@@ -12,7 +12,7 @@
     const W = 860, H = 220, PAD = { l: 58, r: 12, t: 10, b: 22 };
 
     function fmtValue(v, unit) {
-        if (v == null || !isFinite(v)) return '—';
+        if (v == null || !isFinite(v)) return '-';
         if (unit === 'pct') return v.toFixed(1) + '%';
         if (unit === 'degc') return v.toFixed(1) + ' °C';
         if (unit === 'rpm') return Math.round(v) + ' rpm';
@@ -94,7 +94,7 @@
             lastLabelY = labelY;
         }
 
-        // series paths — null values (and gaps in time) break the line
+        // series paths - null values (and gaps in time) break the line
         for (const s of series) {
             let line = '', area = '', run = [];
             const flush = () => {

@@ -1,5 +1,5 @@
 'use strict';
-// Every OID SNMPCanvas touches, as named numeric constants — no MIB files, no
+// Every OID SNMPCanvas touches, as named numeric constants - no MIB files, no
 // MIB parsing. Adding vendor CPU/memory support means adding one entry to
 // VENDORS below; nothing else changes.
 
@@ -18,7 +18,7 @@ const IF = {
     ifSpeed:        '1.3.6.1.2.1.2.2.1.5',   // bps, saturates at ~4.29G
     ifAdminStatus:  '1.3.6.1.2.1.2.2.1.7',   // 1 up, 2 down, 3 testing
     ifOperStatus:   '1.3.6.1.2.1.2.2.1.8',
-    ifInOctets:     '1.3.6.1.2.1.2.2.1.10',  // Counter32 — only used when HC absent
+    ifInOctets:     '1.3.6.1.2.1.2.2.1.10',  // Counter32 - only used when HC absent
     ifInDiscards:   '1.3.6.1.2.1.2.2.1.13',
     ifInErrors:     '1.3.6.1.2.1.2.2.1.14',
     ifOutOctets:    '1.3.6.1.2.1.2.2.1.16',
@@ -75,12 +75,12 @@ const ASROCK_BMC = {
 const NSEXTEND_OUTPUT = '1.3.6.1.4.1.8072.1.3.2.3.1.1';
 
 // --- Temperature sensors ---
-// LM-SENSORS-MIB (net-snmp with lmsensors — Linux hosts, Proxmox, FreeBSD/
+// LM-SENSORS-MIB (net-snmp with lmsensors - Linux hosts, Proxmox, FreeBSD/
 // TrueNAS drive temps). Values are milli-°C in practice.
 const TEMP = {
     lmTempDevice: '1.3.6.1.4.1.2021.13.16.2.1.2',
     lmTempValue:  '1.3.6.1.4.1.2021.13.16.2.1.3',
-    // ENTITY-SENSOR-MIB (RFC 3433) — standard sensor table on network gear.
+    // ENTITY-SENSOR-MIB (RFC 3433) - standard sensor table on network gear.
     entSensorType:      '1.3.6.1.2.1.99.1.1.1.1',   // 8 = celsius
     entSensorScale:     '1.3.6.1.2.1.99.1.1.1.2',   // enum: 9=units, 8=milli...
     entSensorPrecision: '1.3.6.1.2.1.99.1.1.1.3',

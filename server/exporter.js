@@ -39,9 +39,10 @@ function fmtUptime(sec) {
 // Per-kind display strings, kept SHORT for label lines. A null value keeps
 // the entry with "--" so an authored code never looks like a typo.
 function metricDisplay(kind, name, v0, v1) {
+    const NULL_LABEL = { cpu: 'CPU', mem: 'Mem', fs: 'Disk', temp: 'Temp', fan: 'Fan', power: 'Power' };
     if (v0 == null) {
-        return { display: kind === 'cpu' ? 'CPU --' : kind === 'mem' ? 'Mem --' : kind === 'fs' ? 'Disk --'
-                        : kind === 'fan' ? 'Fan --' : '--', value: null };
+        const label = kind === 'gauge' ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
+        return { display: `${label ? label + ' ' : ''}--`, value: null };
     }
     switch (kind) {
         case 'cpu': return { display: `CPU ${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
@@ -55,11 +56,11 @@ function metricDisplay(kind, name, v0, v1) {
             return pct == null ? { display: 'Disk --', value: null }
                 : { display: `Disk ${Math.round(pct)}%`, value: Math.round(pct), unit: '%' };
         }
-        case 'temp': return { display: `${Math.round(v0)}C`, value: Math.round(v0), unit: 'C' };
+        case 'temp': return { display: `Temp ${Math.round(v0)}C`, value: Math.round(v0), unit: 'C' };
         case 'fan': return { display: `Fan ${Math.round(v0)}rpm`, value: Math.round(v0), unit: 'rpm' };
-        case 'power': return { display: v0 >= 100 ? `${Math.round(v0)}W` : `${v0.toFixed(1)}W`, value: v0, unit: 'W' };
+        case 'power': return { display: `Power ${v0 >= 100 ? Math.round(v0) : v0.toFixed(1)}W`, value: v0, unit: 'W' };
         case 'gauge': {
-            // Entity names look like "Util: GPU" — reuse the suffix as the label.
+            // Entity names look like "Util: GPU" - reuse the suffix as the label.
             const label = String(name || '').replace(/^Util:\s*/i, '').trim();
             return { display: `${label ? label + ' ' : ''}${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
         }

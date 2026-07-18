@@ -106,7 +106,7 @@ async function pollDevice(device) {
         }
         const uptimeCs = Number(sys.get(O.SYS.sysUpTime) ?? 0);
         const elapsedCs = device.last_poll_ts ? (nowS - device.last_poll_ts) * 100 : 0;
-        // A drop in sysUpTime means reboot — unless the counter legitimately
+        // A drop in sysUpTime means reboot - unless the counter legitimately
         // wrapped its 32-bit TimeTicks (~497 days).
         const rebooted = device.last_sysuptime_cs != null &&
             uptimeCs < device.last_sysuptime_cs &&
@@ -209,7 +209,7 @@ async function pollDevice(device) {
                     const newAlias = values.get(job.oids.alias);
                     const highSpeed = numOrNull(values.get(job.oids.highSpeed));
                     // A different string at this ifIndex usually means the
-                    // device renumbered after reboot — flag, don't guess.
+                    // device renumbered after reboot - flag, don't guess.
                     update.stale = (newName != null && e.name && String(newName) !== e.name) ? 1 : 0;
                     if (newAlias != null) update.alias = String(newAlias);
                     if (highSpeed > 0) update.speed_bps = highSpeed * 1e6;
@@ -252,7 +252,7 @@ async function pollDevice(device) {
 
         // 4. Persist everything in one transaction.
         persistPoll(device, nowS, uptimeCs, rows, updates);
-        if (rebooted) log(`device ${device.id} (${device.host}) rebooted — counter deltas discarded this cycle`);
+        if (rebooted) log(`device ${device.id} (${device.host}) rebooted - counter deltas discarded this cycle`);
 
         // 5. Refresh the export file if any exported interface lives here.
         exporter.scheduleWrite();

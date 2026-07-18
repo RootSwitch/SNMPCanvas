@@ -20,7 +20,7 @@ RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data
 EXPOSE 9161
-# The server speaks HTTP, or HTTPS when a cert exists in /data/certs — try both.
+# The server speaks HTTP, or HTTPS when a cert exists in /data/certs - try both.
 HEALTHCHECK --interval=60s --timeout=5s --start-period=10s \
     CMD wget -qO- "http://127.0.0.1:$PORT/api/health" || \
         wget -qO- --no-check-certificate "https://127.0.0.1:$PORT/api/health" || exit 1

@@ -1,4 +1,4 @@
-/* SNMPCanvas — styling borrows the CrossCanvas design language: dark panel
+/* SNMPCanvas - styling borrows the CrossCanvas design language: dark panel
    chrome driven by --se-* custom properties, system font stack, flat
    components with 4-6px radii. Themes (themes.js) recolor by setting these
    variables on :root. */
@@ -18,7 +18,7 @@
     --se-txt-dim: #9aa3b2;
     --se-accent: #4c8bf5;
     --se-active: #0066cc;
-    /* status colors — tuned to sit on dark panels; themes may override */
+    /* status colors - tuned to sit on dark panels; themes may override */
     --se-up: #2e9b57;
     --se-down: #d9534f;
     --se-unknown: #8a8f98;

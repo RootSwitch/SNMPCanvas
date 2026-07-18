@@ -2,7 +2,7 @@
 // Thin promise wrapper around net-snmp. Everything SNMP-protocol-shaped lives
 // here: session construction for v2c/v3, GETs with per-varbind error handling,
 // column walks with runaway protection, and value coercion (Counter64 Buffers
-// become BigInt — never Number).
+// become BigInt - never Number).
 
 const snmp = require('net-snmp');
 
@@ -16,7 +16,7 @@ const AUTH_PROTOS = {
 };
 
 // aes256b (Blumenthal) and aes256r (Reeder/Cisco-style) are incompatible
-// key-localization variants of AES-256 — devices use one or the other, and
+// key-localization variants of AES-256 - devices use one or the other, and
 // picking the wrong one looks exactly like a bad password.
 const PRIV_PROTOS = {
     des:     snmp.PrivProtocols.des,
@@ -127,19 +127,19 @@ function translateError(err) {
     e.original = err;
     if (err instanceof snmp.RequestTimedOutError || /timed out/i.test(msg)) {
         e.code = 'timeout';
-        e.message = 'No response (timeout) — check the address, that SNMP is enabled, and any ACLs.';
+        e.message = 'No response (timeout) - check the address, that SNMP is enabled, and any ACLs.';
     } else if (/usmStatsWrongDigests|authentication|digest/i.test(msg)) {
         e.code = 'auth';
-        e.message = 'Authentication failed — wrong auth password or auth protocol.';
+        e.message = 'Authentication failed - wrong auth password or auth protocol.';
     } else if (/usmStatsUnknownUserNames|unknown user/i.test(msg)) {
         e.code = 'auth';
         e.message = 'Unknown SNMPv3 user.';
     } else if (/usmStatsDecryptionErrors|decrypt/i.test(msg)) {
         e.code = 'auth';
-        e.message = 'Decryption failed — wrong privacy password or protocol (note: AES-256 has two variants, try the other).';
+        e.message = 'Decryption failed - wrong privacy password or protocol (note: AES-256 has two variants, try the other).';
     } else if (/usmStatsNotInTimeWindows/i.test(msg)) {
         e.code = 'retry';
-        e.message = 'SNMPv3 time window sync — try again.';
+        e.message = 'SNMPv3 time window sync - try again.';
     } else {
         e.code = 'snmp';
     }

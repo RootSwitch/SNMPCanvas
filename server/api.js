@@ -1,7 +1,7 @@
 'use strict';
 // All /api/* handlers. Routes are (method, regex) pairs dispatched by
 // server.js; bodies are JSON in and JSON out. Mutating routes require
-// Content-Type: application/json (cross-site forms can't send it — CSRF belt
+// Content-Type: application/json (cross-site forms can't send it - CSRF belt
 // on top of the SameSite=Lax cookie).
 
 const crypto = require('node:crypto');
@@ -106,7 +106,7 @@ const routes = [
 
     { method: 'POST', path: /^\/api\/login$/, authRequired: false, handler: (req, res, p, body) => {
         const ip = clientIp(req);
-        if (!auth.loginAllowed(ip)) return json(res, 429, { error: 'Too many attempts — wait a minute.' });
+        if (!auth.loginAllowed(ip)) return json(res, 429, { error: 'Too many attempts - wait a minute.' });
         if (!auth.checkPassword(String(body.password || ''))) {
             auth.recordLoginFailure(ip);
             return json(res, 401, { error: 'Wrong password.' });
@@ -130,7 +130,7 @@ const routes = [
         const ifEnts = db.prepare("SELECT id, name, speed_bps FROM entities WHERE device_id = ? AND kind = 'if' AND tracked = 1");
         const latest = db.prepare('SELECT v0, v1 FROM samples WHERE entity_id = ? ORDER BY ts DESC LIMIT 1');
         ok(res, { devices: devices.map((d) => {
-            // CPU % — null when the device has no CPU entity (shown as N/A).
+            // CPU % - null when the device has no CPU entity (shown as N/A).
             const cpu = cpuEnt.get(d.id);
             const cpuSample = cpu ? latest.get(cpu.id) : null;
             // Busiest interface right now: highest of in/out bps across
@@ -178,7 +178,7 @@ const routes = [
     { method: 'POST', path: /^\/api\/devices$/, handler: (req, res, p, body) => {
         sweepProbes();
         const probe = probes.get(String(body.probeToken || ''));
-        if (!probe) return bad(res, 'Probe expired — run the test again.');
+        if (!probe) return bad(res, 'Probe expired - run the test again.');
         const { target, result } = probe;
         const name = String(body.name || result.system.sysName || target.host).trim() || target.host;
         const chosen = new Map((Array.isArray(body.entities) ? body.entities : []).map((e) => [`${e.kind}:${e.snmpIndex}`, !!e.tracked]));
@@ -330,7 +330,7 @@ const routes = [
                    min(status) st
             FROM samples WHERE entity_id = @id AND ts >= @from AND ts <= @to
             GROUP BY t ORDER BY t`).all({ b: bucket, id: e.id, from, to });
-        // 95th percentile of the raw (unbucketed) samples in range — the
+        // 95th percentile of the raw (unbucketed) samples in range - the
         // classic capacity-planning number, for interfaces only.
         let p95 = null;
         if (e.kind === 'if') {

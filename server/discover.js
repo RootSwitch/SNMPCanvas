@@ -252,7 +252,7 @@ async function probe(target) {
         if (lmNames.size > 0) {
             const lmValues = await walkMap(walkSession, O.TEMP.lmTempValue, warnings, 'lmsensors values');
             // When a CPU package sensor exists, the per-core clones are
-            // redundant — list them, but untracked by default.
+            // redundant - list them, but untracked by default.
             const hasPackage = [...lmNames.values()].some((n) => /^Package id/i.test(String(n)));
             for (const [idx, name] of lmNames) {
                 const raw = Number(lmValues.get(idx));
@@ -288,7 +288,7 @@ async function probe(target) {
         }
 
         // 6. ASRock Rack BMC sensor table: named hardware sensors with
-        //    formatted string readings. The suffix classifies each row —
+        //    formatted string readings. The suffix classifies each row -
         //    "...rpm" is a fan, "...&deg;C" a temperature; voltage rails and
         //    discrete status sensors (0x....) are skipped. "Not Available"
         //    rows (host off, unpopulated fan headers) classify by name and

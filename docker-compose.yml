@@ -2,13 +2,13 @@ services:
   snmpcanvas:
     build: .
     container_name: snmpcanvas
-    # Default port 9161 ("161" for SNMP) — stays clear of UptimeKuma (3001)
+    # Default port 9161 ("161" for SNMP) - stays clear of UptimeKuma (3001)
     # and CrossCanvas/PingCanvas (8080/8443) on a shared docker host.
     ports:
       - "9161:9161"
     volumes:
       # Everything persistent lives here ON THE HOST: the SQLite database,
-      # TLS certs (data/certs/), and snmp-status.json — so a dashboard
+      # TLS certs (data/certs/), and snmp-status.json - so a dashboard
       # container on the same host can read ./data/snmp-status.json directly,
       # or you can bind a second volume and point Settings → export path at it.
       # Create it writable by the container user first:
