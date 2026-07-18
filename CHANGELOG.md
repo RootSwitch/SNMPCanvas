@@ -1,6 +1,18 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 1.0.0 - 2026-07-18
+
+First public release.
+
+- **Outlet kind + switched PDU support**: per-port On/Off cards (red when
+  off), state-timeline graphs, and vendor entries for ZDL / PDU02IP 2-port
+  power strips (both firmware generations - one matched by sysDescr since
+  its agent garbles sysObjectID; the ZDL variant adds an internal
+  temperature sensor). Outlet-state semantics were established empirically
+  by toggling ports and diffing.
+- **`extend` outputs tolerate banners**: the full output is read and the
+  first numeric line wins, so tools like NUT's `upsc` (which prints an SSL
+  notice ahead of the value) work without shell wrappers.
 
 - **snmp-status.json schema v2**: a new `metrics[]` array publishes any
   exported non-interface sensor (CPU, memory, disk, temperature, fan,
