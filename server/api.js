@@ -13,6 +13,26 @@ const discover = require('./discover');
 const poller = require('./poller');
 const exporter = require('./exporter');
 
+// Reject an export path that would let an authenticated user overwrite the
+// application's own files (e.g. public/app.js). The exporter writes JSON here
+// and renames over the target, so an unconstrained path is an arbitrary-file
+// clobber of anything the node user owns. Allow the data dir and any mounted
+// volume outside the app tree (the suite deploy points this at PingCanvas's
+// data folder), but never a path inside the app source.
+const APP_ROOT = path.resolve(__dirname, '..');
+const DATA_ROOT = path.resolve(DATA_DIR);
+function exportPathError(v) {
+    if (!v) { return 'Export path cannot be empty.'; }
+    if (!/\.json$/i.test(v)) { return 'Export path must end in .json'; }
+    const resolved = path.resolve(v);
+    const inApp = resolved === APP_ROOT || resolved.startsWith(APP_ROOT + path.sep);
+    const inData = resolved === DATA_ROOT || resolved.startsWith(DATA_ROOT + path.sep);
+    if (inApp && !inData) {
+        return 'Export path may not write inside the application directory - use the data folder or a mounted export volume.';
+    }
+    return null;
+}
+
 // --- probe tokens: creds from a successful probe are held server-side for a
 // few minutes so the confirm step never round-trips secrets through the page.
 const probes = new Map(); // token -> { target, result, expires }
@@ -34,6 +54,20 @@ const bad = (res, msg) => json(res, 400, { error: msg });
 const notFound = (res) => json(res, 404, { error: 'not found' });
 
 function clientIp(req) {
+    // Behind the reverse proxy the README recommends for TLS, every request
+    // arrives from the proxy's address - so keying the login limiter on
+    // socket.remoteAddress alone would let one attacker's failures lock out
+    // everyone. Honor X-Forwarded-For ONLY when the operator asserts a trusted
+    // proxy via TRUST_PROXY=1; otherwise a client could spoof the header to
+    // evade the limiter or lock out an arbitrary IP. Take the first hop (the
+    // original client) that a trusted proxy prepends.
+    if (process.env.TRUST_PROXY === '1') {
+        const xff = req.headers['x-forwarded-for'];
+        if (xff) {
+            const first = String(xff).split(',')[0].trim();
+            if (first) { return first; }
+        }
+    }
     return req.socket.remoteAddress || 'unknown';
 }
 
@@ -393,7 +427,8 @@ const routes = [
         }
         if (body.exportPath !== undefined) {
             const v = String(body.exportPath).trim();
-            if (!v) return bad(res, 'Export path cannot be empty.');
+            const err = exportPathError(v);
+            if (err) return bad(res, err);
             setSetting('export_path', v);
             exporter.scheduleWrite();
         }
