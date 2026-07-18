@@ -276,9 +276,18 @@ function numOrNull(x) {
 // "Not Available"); numeric styles pass through as numbers.
 function sensorRaw(extra, value) {
     if (value == null) return null;
-    if (extra.style === 'asrock-str' || extra.style === 'extend') {
+    if (extra.style === 'extend') {
+        // Multiline output: first numeric line wins (tools like upsc print
+        // banners before the number).
+        for (const line of String(value).split(/\r?\n/)) {
+            const n = parseFloat(line);
+            if (Number.isFinite(n)) return n;
+        }
+        return null;
+    }
+    if (extra.style === 'asrock-str') {
         const n = parseFloat(String(value));
-        return Number.isFinite(n) ? n : null;   // "Not Available"/error text -> null
+        return Number.isFinite(n) ? n : null;   // "Not Available" -> null
     }
     return numOrNull(value);
 }

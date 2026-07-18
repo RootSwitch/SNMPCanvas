@@ -71,8 +71,11 @@ const ASROCK_BMC = {
 //   extend temp-GPU  /usr/bin/nvidia-smi --query-gpu=temperature.gpu ...
 // The name prefix picks the kind: temp- (degrees C), fan- (RPM),
 // power- (watts), util- (percent). Output must be a single number.
-// nsExtendOutput1Line, indexed by the extend name as a length-prefixed string.
-const NSEXTEND_OUTPUT = '1.3.6.1.4.1.8072.1.3.2.3.1.1';
+// nsExtendOutputFull, indexed by the extend name as a length-prefixed
+// string. The FULL output (not the first-line column) because some tools
+// print banners before the number - NUT's upsc leads with an SSL notice on
+// stdout - and the consumer takes the first numeric line.
+const NSEXTEND_OUTPUT = '1.3.6.1.4.1.8072.1.3.2.3.1.2';
 
 // --- Temperature sensors ---
 // LM-SENSORS-MIB (net-snmp with lmsensors - Linux hosts, Proxmox, FreeBSD/

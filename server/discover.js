@@ -336,7 +336,12 @@ async function probe(target) {
             if (!m) continue;
             const kind = { temp: 'temp', fan: 'fan', power: 'power', util: 'gauge', batt: 'battery', runtime: 'runtime' }[m[1].toLowerCase()];
             const label = { temp: 'Temp', fan: 'Fan', power: 'Power', gauge: 'Util', battery: 'Batt', runtime: 'Runtime' }[kind];
-            const value = parseFloat(String(rawValue));
+            // First numeric line wins - banners (upsc's SSL notice) are skipped.
+            let value = NaN;
+            for (const line of String(rawValue).split(/\r?\n/)) {
+                const n = parseFloat(line);
+                if (Number.isFinite(n)) { value = n; break; }
+            }
             entities.push({
                 kind,
                 snmpIndex: `ext-${name}`,
