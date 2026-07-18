@@ -209,11 +209,16 @@ PingCanvas can stay a dumb "code -> text" swapper:
   "interfaces": [ ... ],
   "metrics": [
     { "code": "C1", "kind": "cpu", "host": "compute-01",
-      "display": "CPU 45%", "value": 45, "unit": "%", "status": "ok",
+      "display": "45%", "value": 45, "unit": "%", "status": "ok",
       "sampledAt": "2026-07-17T01:10:42Z" }
   ]
 }
 ```
+
+Displays are **value-only by convention** (`"45%"`, `"62C"`, `"600rpm"`,
+`"12d 4h"`) - the board author writes their own label text around the code
+token (`CPU: {C1}`), which keeps naming fully under their control and can
+never double a label.
 
 Only `kind:"cpu"` carries a coloring `status` (`ok` under 85%, `warn` to
 94%, `crit` at 95%+) - everything else is display-only, so a wall shows the

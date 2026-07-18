@@ -6,7 +6,8 @@
   exported non-interface sensor (CPU, memory, disk, temperature, fan,
   power, utilization) plus per-device uptime as
   `{ code, kind, host, display, value, unit, status?, sampledAt }` with
-  short pre-formatted display strings. Only CPU carries an ok/warn/crit
+  short value-only display strings ("45%", "62C", "600rpm" - board
+  authors write their own labels). Only CPU carries an ok/warn/crit
   status; everything else is display-only. Every sensor now mints a short
   stable code (shown as chips in the Sensors dialog and on exported
   cards); Export checkboxes appear in the Sensors dialog and an uptime
