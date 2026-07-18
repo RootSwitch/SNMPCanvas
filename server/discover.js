@@ -57,7 +57,7 @@ async function probe(target) {
             sysName: sys.get(O.SYS.sysName) != null ? String(sys.get(O.SYS.sysName)) : ''
         };
 
-        const vendor = O.matchVendor(system.sysObjectID);
+        const vendor = O.matchVendor(system.sysObjectID, system.sysDescr);
         const entities = [];
 
         // 2. Interfaces: ifTable + ifXTable.
@@ -260,14 +260,28 @@ async function probe(target) {
         }
 
         // Switched power strips: one entity per outlet (state 1=on, 0=off).
+        // Either a walkable per-port column (stateOid) or, for firmware that
+        // scatters states across a flat list, explicit per-port instances.
         if (vendor && vendor.outlets) {
-            const states = await walkMap(walkSession, vendor.outlets.stateOid, warnings, `${vendor.key} outlets`);
-            for (const [idx] of states) {
-                entities.push({
-                    kind: 'outlet', snmpIndex: idx, name: `Outlet ${idx}`,
-                    extra: { style: 'outlet', valueOid: `${vendor.outlets.stateOid}.${idx}` },
-                    tracked: true
-                });
+            if (vendor.outlets.stateOid) {
+                const states = await walkMap(walkSession, vendor.outlets.stateOid, warnings, `${vendor.key} outlets`);
+                for (const [idx] of states) {
+                    entities.push({
+                        kind: 'outlet', snmpIndex: idx, name: `Outlet ${idx}`,
+                        extra: { style: 'outlet', valueOid: `${vendor.outlets.stateOid}.${idx}` },
+                        tracked: true
+                    });
+                }
+            } else if (vendor.outlets.ports) {
+                const got = await S.get(session, vendor.outlets.ports.map((p) => p.oid));
+                for (const p of vendor.outlets.ports) {
+                    if (got.get(p.oid) == null) continue;
+                    entities.push({
+                        kind: 'outlet', snmpIndex: String(p.n), name: `Outlet ${p.n}`,
+                        extra: { style: 'outlet', valueOid: p.oid },
+                        tracked: true
+                    });
+                }
             }
         }
 

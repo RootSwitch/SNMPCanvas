@@ -137,6 +137,20 @@ const VENDORS = [
         outlets: { stateOid: '1.3.6.1.4.1.26104.3.3.3.1.4' }
     },
     {
+        // First-generation PDU02IP firmware: garbled sysObjectID (matched by
+        // sysDescr instead) and outlet states at fixed slots in a flat status
+        // list - positions established by toggling ports and diffing.
+        key: 'pdu02ip-v1',
+        label: 'PDU02IP power strip (v1 firmware)',
+        descr: /PDU02IP Remote Power Control/,
+        outlets: {
+            ports: [
+                { n: 1, oid: '1.3.6.1.4.1.26104.1.1.1.5.1.8' },
+                { n: 2, oid: '1.3.6.1.4.1.26104.1.1.1.5.1.9' }
+            ]
+        }
+    },
+    {
         key: 'mikrotik',
         label: 'MikroTik RouterOS',
         prefix: '1.3.6.1.4.1.14988.',
@@ -158,16 +172,25 @@ const VENDORS = [
     // MikroTik answers HOST-RESOURCES-MIB; no entry needed.
 ];
 
-function matchVendor(sysObjectID) {
-    if (!sysObjectID) return null;
-    // Trailing-dot compare so a sysObjectID that IS the bare enterprise root
-    // (some budget devices) still matches its "1.3.6.1.4.1.NNNN." prefix.
-    const candidate = sysObjectID + '.';
-    let best = null;
-    for (const v of VENDORS) {
-        if (candidate.startsWith(v.prefix) && (!best || v.prefix.length > best.prefix.length)) best = v;
+function matchVendor(sysObjectID, sysDescr) {
+    // OID-prefix matches take precedence. Trailing-dot compare so a
+    // sysObjectID that IS the bare enterprise root (some budget devices)
+    // still matches its "1.3.6.1.4.1.NNNN." prefix.
+    if (sysObjectID) {
+        const candidate = sysObjectID + '.';
+        let best = null;
+        for (const v of VENDORS) {
+            if (v.prefix && candidate.startsWith(v.prefix) && (!best || v.prefix.length > best.prefix.length)) best = v;
+        }
+        if (best) return best;
     }
-    return best;
+    // Fallback for agents with broken sysObjectIDs: match on sysDescr.
+    if (sysDescr) {
+        for (const v of VENDORS) {
+            if (v.descr && v.descr.test(sysDescr)) return v;
+        }
+    }
+    return null;
 }
 
 module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, NSEXTEND_OUTPUT, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };
