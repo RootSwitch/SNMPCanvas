@@ -214,6 +214,38 @@ SNMPCanvas is a networked app with a small, deliberate threat model:
   source address, allow the host IP - or run the container with
   `network_mode: host` or a macvlan.
 
+## Moving or restoring the database
+
+Everything - devices, credentials, history, interface codes - lives in one
+SQLite file, `snmpcanvas.db` in the data volume. To move an instance to another
+machine (or restore a backup):
+
+- **Shut down first, then copy.** On `docker compose down`, SNMPCanvas
+  checkpoints the write-ahead log back into the main file, so a clean stop
+  leaves `snmpcanvas.db` self-contained - copy just that one file. If you can't
+  be sure it stopped cleanly (a `docker kill`, a power loss), copy all three of
+  `snmpcanvas.db`, `snmpcanvas.db-wal`, `snmpcanvas.db-shm` together and let
+  SQLite merge them on open. The **Download database backup** button in Settings
+  sidesteps this entirely - it writes a consistent snapshot regardless of
+  running state.
+- **Carry `SNMPCANVAS_SECRET` with the file.** If the source instance encrypts
+  credentials (the secret is set), the community strings and v3 keys are only
+  decryptable with that same secret - set the identical `SNMPCANVAS_SECRET` on
+  the target, or polling fails on every device (the raw ciphertext gets handed
+  to SNMP). A database with **no** secret carries its credentials in cleartext,
+  so treat the file like a password store when moving it.
+- **The admin password travels too** (its hash is in the file), so the target
+  logs in with the source's password and skips the first-run setup page.
+
+**Turning on encryption for an existing database - no rebuild needed.** Setting
+`SNMPCANVAS_SECRET` does not retroactively encrypt credentials already stored in
+cleartext (encryption happens when a credential is written, not at startup). But
+you don't have to start over: set the secret, then **re-save each device's
+credentials** (Edit device -> Save, e.g. when you change a community off
+`public`). That write encrypts them. Re-saving credentials leaves the interface
+`code`s untouched, so any PingCanvas board bound to those codes keeps working -
+no board changes, no history lost.
+
 ## snmp-status.json
 
 Every poll cycle, everything marked **Export** is written atomically to one
