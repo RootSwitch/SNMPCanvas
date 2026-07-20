@@ -325,9 +325,19 @@ const routes = [
                             JSON.stringify(e.extra || {}), e.adminStatus || null, e.operStatus || null, cur.id);
                 }
             }
+            // Prune entities that vanished - but ONLY when the same KIND was
+            // otherwise seen this probe. Trusting an incomplete probe as the
+            // authoritative inventory is a footgun: a cold hrProcessorLoad (e.g.
+            // right after an snmpd restart) returns zero CPU and would untrack the
+            // device's CPU; a timed-out ifTable walk returns zero interfaces and
+            // would untrack ALL of them at once. "Saw 19 of 20 interfaces" is a
+            // real decommission; "saw 0 of a kind that used to exist" is a failed
+            // read for that class - keep it (the poller marks it stale, and the
+            // user can remove a genuinely-dead entity by hand).
+            const seenKinds = new Set(result.entities.map((e) => e.kind));
             for (const e of existing) {
                 const key = `${e.kind}:${e.snmp_index}`;
-                if (!seen.has(key) && e.tracked) {
+                if (!seen.has(key) && e.tracked && seenKinds.has(e.kind)) {
                     db.prepare('UPDATE entities SET tracked = 0, export = 0, stale = 1 WHERE id = ?').run(e.id);
                     summary.removed.push(`${e.kind} ${e.name} (untracked, history kept)`);
                 }
