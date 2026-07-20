@@ -129,6 +129,12 @@
         route();
     });
 
+    // Add device is reachable from every view via the nav (the wizard is a
+    // modal, so it opens over whatever page you are on).
+    const $navAdd = document.getElementById('nav-add');
+    $navAdd.addEventListener('click', (ev) => { ev.preventDefault(); addDeviceWizard(); });
+    $navAdd.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); addDeviceWizard(); } });
+
     // ===== router =====
     window.addEventListener('hashchange', route);
 
@@ -263,13 +269,12 @@
     }
 
     // ===== add-device wizard =====
-    function addDeviceWizard() {
-        $modal.innerHTML = `
-        <h2>Add device</h2>
-        <form id="probe-form">
-        <div class="form-grid">
-            <label>Address</label><input type="text" id="f-host" placeholder="IP or hostname" required>
-            <label>Port</label><input type="number" id="f-port" value="161" min="1" max="65535">
+
+    // Shared SNMP credential fields (version, community, v3 auth/priv) used by
+    // both the single-device and bulk-add wizards. Each wizard supplies its own
+    // address control alongside these.
+    function credFieldsHtml() {
+        return `
             <label>SNMP version</label>
             <select id="f-version"><option value="2c">v2c</option><option value="3">v3</option></select>
             <label class="v2c-only">Community</label><input class="v2c-only" type="text" id="f-community" value="public">
@@ -293,18 +298,11 @@
                 <option value="aes256r">AES-256 (Reeder / Cisco)</option>
                 <option value="des">DES</option>
             </select>
-            <label class="v3-priv" style="display:none">Privacy password</label><input class="v3-priv" style="display:none" type="password" id="f-privkey">
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn-primary" id="probe-btn">Test &amp; discover</button>
-            <button type="button" id="cancel-btn">Cancel</button>
-            <span class="muted small" id="probe-status"></span>
-        </div>
-        <div class="error-text" id="probe-err" style="margin-top:8px"></div>
-        </form>
-        <div id="inventory"></div>`;
-        $modal.showModal();
+            <label class="v3-priv" style="display:none">Privacy password</label><input class="v3-priv" style="display:none" type="password" id="f-privkey">`;
+    }
 
+    // Show only the credential fields relevant to the chosen version/level.
+    function wireCredToggle() {
         const showFields = () => {
             const v3 = document.getElementById('f-version').value === '3';
             const level = document.getElementById('f-level').value;
@@ -315,7 +313,141 @@
         };
         document.getElementById('f-version').addEventListener('change', showFields);
         document.getElementById('f-level').addEventListener('change', showFields);
+    }
+
+    // Read the credential fields into the shape the probe API expects.
+    function readCreds() {
+        return {
+            version: document.getElementById('f-version').value,
+            community: document.getElementById('f-community').value,
+            v3_user: document.getElementById('f-user').value,
+            v3_level: document.getElementById('f-level').value,
+            v3_auth_proto: document.getElementById('f-authproto').value,
+            v3_auth_key: document.getElementById('f-authkey').value,
+            v3_priv_proto: document.getElementById('f-privproto').value,
+            v3_priv_key: document.getElementById('f-privkey').value
+        };
+    }
+
+    // Bulk add: one set of credentials, a list of addresses. Each is probed and
+    // added with its default sensor selection (no per-device review) - the fast
+    // path for rebuilding a device list. Runs a few probes at a time and reports
+    // each address's outcome; leaves the ones that failed in the box to retry.
+    function bulkAddWizard() {
+        $modal.innerHTML = `
+        <h2>Bulk add devices</h2>
+        <p class="muted small">One address per line. Each is probed with the credentials below and added with its
+        default sensor selection - open any device afterward to fine-tune what is tracked.</p>
+        <form id="bulk-form">
+        <div class="form-grid">
+            <label>Addresses</label><textarea id="f-hosts" rows="6" placeholder="192.0.2.10&#10;switch-a.lan&#10;192.0.2.20" required></textarea>
+            <label>Port</label><input type="number" id="f-port" value="161" min="1" max="65535">
+            ${credFieldsHtml()}
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn-primary" id="bulk-go">Add all</button>
+            <button type="button" id="back-btn">Back</button>
+            <button type="button" id="close-btn">Close</button>
+            <span class="muted small" id="bulk-status"></span>
+        </div>
+        </form>
+        <div id="bulk-results"></div>`;
+        if (!$modal.open) $modal.showModal();
+        wireCredToggle();
+        document.getElementById('back-btn').addEventListener('click', addDeviceWizard);
+        document.getElementById('close-btn').addEventListener('click', () => { $modal.close(); route(); });
+
+        document.getElementById('bulk-form').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const status = document.getElementById('bulk-status');
+            const go = document.getElementById('bulk-go');
+            const hosts = [...new Set(document.getElementById('f-hosts').value.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean))];
+            if (hosts.length === 0) { status.textContent = 'Enter at least one address.'; return; }
+            const port = parseInt(document.getElementById('f-port').value, 10) || 161;
+            const creds = readCreds();
+
+            // Skip addresses already monitored so a re-run never double-adds them.
+            let existing = new Set();
+            try {
+                const { devices } = await GET('/api/devices');
+                existing = new Set(devices.map((d) => String(d.host).toLowerCase()));
+            } catch (e) { /* non-fatal: worst case a duplicate the user can delete */ }
+
+            go.disabled = true;
+            const results = document.getElementById('bulk-results');
+            results.innerHTML = `
+            <hr style="border:none;border-top:1px solid var(--se-border);margin:14px 0">
+            <table class="list"><thead><tr><th>Address</th><th>Result</th></tr></thead>
+            <tbody id="bulk-rows"></tbody></table>`;
+            const rows = document.getElementById('bulk-rows');
+            const cell = {};
+            for (const h of hosts) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${esc(h)}</td><td class="muted" data-state>queued</td>`;
+                rows.appendChild(tr);
+                cell[h] = tr.querySelector('[data-state]');
+            }
+            const set = (h, cls, text) => { cell[h].className = cls; cell[h].textContent = text; };
+
+            let done = 0, added = 0;
+            const failed = [];
+            const addOne = async (h) => {
+                if (existing.has(h.toLowerCase())) { set(h, 'muted', 'already monitored - skipped'); done++; status.textContent = `${done} / ${hosts.length}`; return; }
+                set(h, 'muted', 'probing…');
+                try {
+                    const r = await api('POST', '/api/devices/probe', { host: h, port, ...creds });
+                    if (!r.entities || r.entities.length === 0) {
+                        set(h, 'warn-text', 'reachable, but no sensors found');
+                        failed.push(h);
+                    } else {
+                        await api('POST', '/api/devices', { probeToken: r.probeToken, name: r.system.sysName || h, pollIntervalS: null, entities: [] });
+                        const n = r.entities.filter((e) => e.tracked).length;
+                        set(h, '', `added ${esc(r.system.sysName || h)} - ${n} sensor${n === 1 ? '' : 's'}`);
+                        added++;
+                    }
+                } catch (e) {
+                    set(h, 'error-text', e.message);
+                    failed.push(h);
+                } finally {
+                    done++;
+                    status.textContent = `${done} / ${hosts.length}`;
+                }
+            };
+
+            // A few at a time: a cold host can be slow, but don't flood the poller.
+            let idx = 0;
+            const worker = async () => { while (idx < hosts.length) await addOne(hosts[idx++]); };
+            await Promise.all(Array.from({ length: Math.min(4, hosts.length) }, worker));
+
+            status.textContent = `Done - ${added} added, ${hosts.length - added} not.`;
+            document.getElementById('f-hosts').value = failed.join('\n'); // leave failures to retry
+            go.disabled = false;
+        });
+    }
+
+    function addDeviceWizard() {
+        $modal.innerHTML = `
+        <h2>Add device</h2>
+        <form id="probe-form">
+        <div class="form-grid">
+            <label>Address</label><input type="text" id="f-host" placeholder="IP or hostname" required>
+            <label>Port</label><input type="number" id="f-port" value="161" min="1" max="65535">
+            ${credFieldsHtml()}
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn-primary" id="probe-btn">Test &amp; discover</button>
+            <button type="button" id="bulk-btn">Bulk add…</button>
+            <button type="button" id="cancel-btn">Cancel</button>
+            <span class="muted small" id="probe-status"></span>
+        </div>
+        <div class="error-text" id="probe-err" style="margin-top:8px"></div>
+        </form>
+        <div id="inventory"></div>`;
+        $modal.showModal();
+
+        wireCredToggle();
         document.getElementById('cancel-btn').addEventListener('click', () => $modal.close());
+        document.getElementById('bulk-btn').addEventListener('click', bulkAddWizard);
 
         document.getElementById('probe-form').addEventListener('submit', async (ev) => {
             ev.preventDefault();
@@ -327,14 +459,7 @@
             const body = {
                 host: document.getElementById('f-host').value.trim(),
                 port: parseInt(document.getElementById('f-port').value, 10) || 161,
-                version: document.getElementById('f-version').value,
-                community: document.getElementById('f-community').value,
-                v3_user: document.getElementById('f-user').value,
-                v3_level: document.getElementById('f-level').value,
-                v3_auth_proto: document.getElementById('f-authproto').value,
-                v3_auth_key: document.getElementById('f-authkey').value,
-                v3_priv_proto: document.getElementById('f-privproto').value,
-                v3_priv_key: document.getElementById('f-privkey').value
+                ...readCreds()
             };
             try {
                 const r = await api('POST', '/api/devices/probe', body);

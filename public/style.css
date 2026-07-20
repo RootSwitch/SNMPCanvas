@@ -83,6 +83,7 @@ a:hover { text-decoration: underline; }
 }
 #topbar nav a:hover { background: var(--se-panel-2); text-decoration: none; }
 #topbar nav a.active { background: var(--se-panel-2); color: var(--se-accent); }
+#topbar nav a.nav-add { color: var(--se-accent); font-weight: 600; cursor: pointer; }
 
 .topbar-spacer { flex: 1; }
 
