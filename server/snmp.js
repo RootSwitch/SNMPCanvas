@@ -100,21 +100,30 @@ async function getMany(session, oids, per = 25) {
 
 // Walk one table column. Resolves to Array<{ index, value }> where `index` is
 // the OID suffix after the column base (e.g. ifIndex, or a multi-part index).
-// Guards against broken agents: subtree-prefix enforcement plus a hard row cap.
+// Guards against broken agents: subtree-prefix enforcement, a hard row cap,
+// and a stall detector. The stall guard matters: some agents answer a GetBulk
+// on a subtree they don't implement by echoing the requested OID as an error
+// varbind forever instead of advancing past it, and net-snmp's subtree() will
+// re-request in a tight loop until the process dies. Every varbind in such a
+// batch is filtered out (error / out-of-prefix), so "a batch that contributed
+// no rows" is the loop's signature - and on a healthy walk it only happens at
+// the very end, where stopping is a no-op.
 function walkColumn(session, baseOid, maxRows = 10000) {
     return new Promise((resolve, reject) => {
         const rows = [];
         const prefix = baseOid + '.';
-        let capped = false;
+        let stopped = false;
         session.subtree(baseOid, 20, (varbinds) => {
+            const before = rows.length;
             for (const vb of varbinds) {
                 if (snmp.isVarbindError(vb)) continue;
                 if (!vb.oid.startsWith(prefix)) continue;
                 rows.push({ index: vb.oid.slice(prefix.length), value: coerce(vb) });
-                if (rows.length >= maxRows) { capped = true; return true; } // stop walk
+                if (rows.length >= maxRows) { stopped = true; return true; } // stop walk
             }
+            if (rows.length === before) { stopped = true; return true; }     // stalled walk
         }, (err) => {
-            if (err && !capped) return reject(translateError(err));
+            if (err && !stopped) return reject(translateError(err));
             resolve(rows);
         });
     });
