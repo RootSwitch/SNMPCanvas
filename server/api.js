@@ -221,10 +221,10 @@ const routes = [
 
         const deviceId = db.transaction(() => {
             const info = db.prepare(`INSERT INTO devices
-                (name, host, port, snmp_version, sys_descr, sys_object_id, sys_name, vendor_key, poll_interval_s, created_ts, uptime_code)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                (name, host, port, snmp_version, sys_descr, sys_object_id, sys_name, sys_location, vendor_key, poll_interval_s, created_ts, uptime_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                 .run(name, target.host, target.port, target.version, result.system.sysDescr,
-                     result.system.sysObjectID, result.system.sysName, result.vendorKey, interval,
+                     result.system.sysObjectID, result.system.sysName, result.system.sysLocation, result.vendorKey, interval,
                      Math.floor(Date.now() / 1000), generateIfCode(name, 'uptime'));
             const id = info.lastInsertRowid;
             saveCredentials(id, target.creds);
@@ -302,8 +302,8 @@ const routes = [
         }
         const summary = { added: [], removed: [], updated: [] };
         db.transaction(() => {
-            db.prepare('UPDATE devices SET sys_descr = ?, sys_object_id = ?, sys_name = ?, vendor_key = ? WHERE id = ?')
-                .run(result.system.sysDescr, result.system.sysObjectID, result.system.sysName, result.vendorKey, d.id);
+            db.prepare('UPDATE devices SET sys_descr = ?, sys_object_id = ?, sys_name = ?, sys_location = ?, vendor_key = ? WHERE id = ?')
+                .run(result.system.sysDescr, result.system.sysObjectID, result.system.sysName, result.system.sysLocation, result.vendorKey, d.id);
             const existing = db.prepare('SELECT * FROM entities WHERE device_id = ?').all(d.id);
             const byKey = new Map(existing.map((e) => [`${e.kind}:${e.snmp_index}`, e]));
             const seen = new Set();

@@ -49,12 +49,13 @@ async function probe(target) {
     let v1Session = null;
     try {
         // 1. Credential/reachability gate: plain GET of the system group.
-        const sys = await S.get(session, [O.SYS.sysDescr, O.SYS.sysObjectID, O.SYS.sysUpTime, O.SYS.sysName]);
+        const sys = await S.get(session, [O.SYS.sysDescr, O.SYS.sysObjectID, O.SYS.sysUpTime, O.SYS.sysName, O.SYS.sysLocation]);
         const system = {
             sysDescr: sys.get(O.SYS.sysDescr) != null ? String(sys.get(O.SYS.sysDescr)) : '',
             sysObjectID: sys.get(O.SYS.sysObjectID) != null ? String(sys.get(O.SYS.sysObjectID)) : '',
             sysUpTime: Number(sys.get(O.SYS.sysUpTime) ?? 0),
-            sysName: sys.get(O.SYS.sysName) != null ? String(sys.get(O.SYS.sysName)) : ''
+            sysName: sys.get(O.SYS.sysName) != null ? String(sys.get(O.SYS.sysName)) : '',
+            sysLocation: sys.get(O.SYS.sysLocation) != null ? String(sys.get(O.SYS.sysLocation)) : ''
         };
 
         const vendor = O.matchVendor(system.sysObjectID, system.sysDescr);

@@ -55,14 +55,14 @@ function rowFor(d) {
         '',                               // Serial-Number (not tracked)
         '',                               // Asset-Tag (not tracked)
         oneLine(d.sys_descr, 160),        // Description
-        '',                               // Location (no sysLocation stored)
+        oneLine(d.sys_location, 120),     // Location (SNMP sysLocation; CrossCanvas nests it into zones)
         ''                                // Firmware (left blank - unreliable to parse)
     ];
 }
 
 function buildCsv() {
     const devices = db.prepare(
-        'SELECT name, host, sys_descr, sys_name, vendor_key FROM devices ORDER BY name').all();
+        'SELECT name, host, sys_descr, sys_name, sys_location, vendor_key FROM devices ORDER BY name').all();
     const lines = [COLUMNS.join(',')];
     for (const d of devices) { lines.push(rowFor(d).map(csvCell).join(',')); }
     return lines.join('\r\n') + '\r\n';   // CRLF: friendliest for spreadsheet apps

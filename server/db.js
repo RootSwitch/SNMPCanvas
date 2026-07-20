@@ -133,6 +133,7 @@ const deviceCols = db.prepare('PRAGMA table_info(devices)').all().map((c) => c.n
 if (!deviceCols.includes('notes')) db.exec('ALTER TABLE devices ADD COLUMN notes TEXT');
 if (!deviceCols.includes('export_uptime')) db.exec('ALTER TABLE devices ADD COLUMN export_uptime INTEGER NOT NULL DEFAULT 0');
 if (!deviceCols.includes('uptime_code')) db.exec('ALTER TABLE devices ADD COLUMN uptime_code TEXT');
+if (!deviceCols.includes('sys_location')) db.exec('ALTER TABLE devices ADD COLUMN sys_location TEXT');
 
 const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
 if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');
