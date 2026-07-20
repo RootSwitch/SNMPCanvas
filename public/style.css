@@ -20,7 +20,7 @@
     --se-active: #0066cc;
     /* status colors - tuned to sit on dark panels; themes may override */
     --se-up: #2e9b57;
-    --se-down: #d9534f;
+    --se-down: #d64545;
     --se-unknown: #8a8f98;
     /* chart series (out/err derive from accent-family hues) */
     --se-series-out: #2e9b57;
