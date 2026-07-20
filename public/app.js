@@ -396,13 +396,23 @@
                 set(h, 'muted', 'probing…');
                 try {
                     const r = await api('POST', '/api/devices/probe', { host: h, port, ...creds });
+                    // Surface probe warnings instead of swallowing them: bulk
+                    // auto-accepts, so without this a cold-cache CPU miss (or a
+                    // restricted view) lands silently and only shows up later
+                    // as n/a. Count in the row, full text on hover.
+                    const warns = r.warnings || [];
+                    if (warns.length) { cell[h].title = warns.join('\n\n'); }
                     if (!r.entities || r.entities.length === 0) {
                         set(h, 'warn-text', 'reachable, but no sensors found');
                         failed.push(h);
                     } else {
                         await api('POST', '/api/devices', { probeToken: r.probeToken, name: r.system.sysName || h, pollIntervalS: null, entities: [] });
                         const n = r.entities.filter((e) => e.tracked).length;
-                        set(h, '', `added ${esc(r.system.sysName || h)} - ${n} sensor${n === 1 ? '' : 's'}`);
+                        // set() writes textContent, so no esc() - entities would
+                        // show literally (&amp;) rather than escape anything.
+                        set(h, warns.length ? 'warn-text' : '',
+                            `added ${r.system.sysName || h} - ${n} sensor${n === 1 ? '' : 's'}` +
+                            (warns.length ? ` - ${warns.length} warning${warns.length === 1 ? '' : 's'} (hover)` : ''));
                         added++;
                     }
                 } catch (e) {
