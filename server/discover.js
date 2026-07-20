@@ -110,7 +110,8 @@ async function probe(target) {
             }
         }
 
-        // 3. CPU: vendor map first, HOST-RESOURCES fallback.
+        // 3. CPU from the vendor map (Cisco/MikroTik). The HOST-RESOURCES
+        //    fallback for everything else is deferred to after the storage walk.
         let cpuFound = false;
         if (vendor && vendor.cpu) {
             if (vendor.cpu.style === 'walk-gauge-pct') {
@@ -140,16 +141,9 @@ async function probe(target) {
                 }
             }
         }
-        if (!cpuFound) {
-            const hrCpu = await walkMap(walkSession, O.HR.hrProcessorLoad, warnings, 'hrProcessorLoad');
-            if (hrCpu.size > 0) {
-                entities.push({
-                    kind: 'cpu', snmpIndex: 'cpu', name: `CPU (${hrCpu.size} core${hrCpu.size > 1 ? 's' : ''})`,
-                    extra: { style: 'gauge-avg', oids: [...hrCpu.keys()].map((i) => `${O.HR.hrProcessorLoad}.${i}`) },
-                    tracked: true
-                });
-            }
-        }
+        // The HOST-RESOURCES CPU fallback runs after the storage walk below, so
+        // it can tell a cold hrProcessorLoad cache (retry + warn) apart from a
+        // device that genuinely lacks host-resources (no CPU, no warning).
 
         // 4. Memory: vendor pools first, hrStorage(Ram) fallback. Filesystems
         //    always come from hrStorage(FixedDisk).
@@ -212,6 +206,34 @@ async function probe(target) {
                         style: 'hr-storage', allocUnits: best.alloc,
                         usedOid: `${O.HR.hrStorageUsed}.${best.idx}`, sizeOid: `${O.HR.hrStorageSize}.${best.idx}`
                     },
+                    tracked: true
+                });
+            }
+        }
+
+        // CPU (HOST-RESOURCES fallback). Deferred to here so hrType (above) tells
+        // us whether the agent exposes host-resources at all. net-snmp computes
+        // hrProcessorLoad lazily from sampled CPU deltas, so right after an snmpd
+        // restart (or on a many-core / slow agent) the first walk can come back
+        // empty or time out on a cold cache while every static table answers fine
+        // - and a plain walk drops CPU silently (the timeout is swallowed). So: if
+        // the agent has host-resources storage but no hrProcessorLoad, retry once
+        // (the first walk warms the cache), then warn rather than vanish. No
+        // host-resources at all means genuinely no CPU here - no retry, no noise.
+        if (!cpuFound) {
+            let hrCpu = await walkMap(walkSession, O.HR.hrProcessorLoad, warnings, 'hrProcessorLoad');
+            if (hrCpu.size === 0 && hrType.size > 0) {
+                hrCpu = await walkMap(walkSession, O.HR.hrProcessorLoad, warnings, 'hrProcessorLoad (retry)');
+                if (hrCpu.size === 0) {
+                    warnings.push('The agent exposes HOST-RESOURCES storage but returned no CPU load ' +
+                        '(hrProcessorLoad). If this device has a CPU, its cache is likely still cold from a ' +
+                        'recent snmpd restart - use Rediscover in a moment and the CPU should appear.');
+                }
+            }
+            if (hrCpu.size > 0) {
+                entities.push({
+                    kind: 'cpu', snmpIndex: 'cpu', name: `CPU (${hrCpu.size} core${hrCpu.size > 1 ? 's' : ''})`,
+                    extra: { style: 'gauge-avg', oids: [...hrCpu.keys()].map((i) => `${O.HR.hrProcessorLoad}.${i}`) },
                     tracked: true
                 });
             }
