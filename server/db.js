@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS credentials (
 CREATE TABLE IF NOT EXISTS entities (
   id           INTEGER PRIMARY KEY,
   device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge','battery','runtime','outlet')),
+  kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge','battery','runtime','outlet','meter')),
   snmp_index   TEXT NOT NULL,
   name         TEXT,
   alias        TEXT,
@@ -154,18 +154,19 @@ if (!deviceCols.includes('sys_location')) db.exec('ALTER TABLE devices ADD COLUM
 const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
 if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');
 
-// The kind CHECK constraint has grown over time ('temp', then 'fan');
-// SQLite can't alter a CHECK, so databases created before the newest kind
-// get a one-time table rebuild (ids preserved - samples reference them).
+// The kind CHECK constraint has grown over time ('temp', 'fan', 'outlet',
+// now 'meter'); SQLite can't alter a CHECK, so databases created before the
+// newest kind get a one-time table rebuild (ids preserved - samples reference
+// them). The trigger tracks the most recently added kind.
 const entitySql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entities'").get().sql;
-if (!entitySql.includes("'outlet'")) {
+if (!entitySql.includes("'meter'")) {
     db.pragma('foreign_keys = OFF');
     db.transaction(() => {
         db.exec(`
             CREATE TABLE entities_migrate (
               id           INTEGER PRIMARY KEY,
               device_id    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge','battery','runtime','outlet')),
+              kind         TEXT NOT NULL CHECK (kind IN ('if','cpu','mem','fs','temp','fan','power','gauge','battery','runtime','outlet','meter')),
               snmp_index   TEXT NOT NULL,
               name         TEXT,
               alias        TEXT,
