@@ -121,9 +121,25 @@ function codeIsTaken(c) {
            db.prepare('SELECT 1 FROM devices WHERE uptime_code = ?').get(c);
 }
 
+// A code is an opaque ID, but it ends up on screen (docs, screenshots, the
+// {code} chip) and saved as plain text in the .xcanvas / DB - so skip the few
+// candidate windows that would spell something unfortunate. The alphabet drops
+// I and O (rules out a lot) but keeps A/E/U, so real words are reachable
+// (FUCK, CUNT, FART...). This is a short curated list, NOT a profanity engine -
+// substring match, uppercase like the alphabet; extend as needed. A hit just
+// advances to the next hash window, exactly like a collision, so codes stay
+// deterministic (a given name still maps to one stable code) and this can never
+// exhaust the candidate list.
+const CODE_DENY = ['FUCK', 'FUK', 'FCK', 'CUNT', 'CNT', 'SHT', 'ASS', 'AZZ', 'ARSE', 'FART', 'CUM', 'FAG', 'RETARD'];
+function codeIsUnfortunate(c) {
+    for (const bad of CODE_DENY) { if (c.indexOf(bad) !== -1) return true; }
+    return false;
+}
+
 function generateIfCode(deviceName, entityName, taken) {
     for (const c of codeCandidates(deviceName, entityName)) {
-        if (taken ? !taken.has(c) : !codeIsTaken(c)) return c;
+        const free = taken ? !taken.has(c) : !codeIsTaken(c);
+        if (free && !codeIsUnfortunate(c)) return c;
     }
     return crypto.randomBytes(4).toString('hex').toUpperCase(); // unreachable in practice
 }
