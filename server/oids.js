@@ -164,6 +164,22 @@ const VENDORS = [
                 { name: 'CPU temperature', oid: '1.3.6.1.4.1.14988.1.1.3.11.0', div: 10 }
             ]
         }
+    },
+    {
+        // FS.COM S-series / Ruijie FSOS whitelabel switches (Broadcom-based).
+        // No HOST-RESOURCES health tree; sensors live in the device-info
+        // entity table. Temperature rows carry a name column (air_inlet /
+        // board / switch) and a current-°C column; absent slots are padded
+        // with "dev:invalid" rows reading 0, which walk-descr-value skips.
+        key: 'fs-ruijie',
+        label: 'FS.COM / Ruijie (FSOS)',
+        prefix: '1.3.6.1.4.1.52642.',
+        temp: {
+            style: 'walk-descr-value',
+            descrOid: '1.3.6.1.4.1.52642.1.1.10.2.1.1.44.1.4',   // sensor name
+            valueOid: '1.3.6.1.4.1.52642.1.1.10.2.1.1.44.1.5',   // current °C
+            div: 1
+        }
     }
     // Extension examples (untested, contributions welcome):
     // { key: 'fortinet', prefix: '1.3.6.1.4.1.12356.',

@@ -271,12 +271,21 @@ async function probe(target) {
                     });
                 }
             } else if (vendor.temp.style === 'walk-descr-value') {
+                const div = vendor.temp.div || 1;
                 const names = await walkMap(walkSession, vendor.temp.descrOid, warnings, `${vendor.key} temperatures`);
+                const vals = await walkMap(walkSession, vendor.temp.valueOid, warnings, `${vendor.key} temperature values`);
                 for (const [idx, name] of names) {
+                    // Some agents pad the sensor table with placeholder rows for
+                    // absent slots (FS/Ruijie lists them as "dev:invalid" reading
+                    // 0). Skip empty/invalid names, and gate tracking on a
+                    // plausible reading like the other temp styles.
+                    const nm = String(name).trim();
+                    if (!nm || /invalid/i.test(nm)) continue;
+                    const c = vals.has(idx) ? Number(vals.get(idx)) / div : null;
                     entities.push({
-                        kind: 'temp', snmpIndex: `v-${idx}`, name: `Temp: ${String(name)}`,
-                        extra: { style: 'div', valueOid: `${vendor.temp.valueOid}.${idx}`, div: vendor.temp.div || 1 },
-                        tracked: true
+                        kind: 'temp', snmpIndex: `v-${idx}`, name: `Temp: ${nm}`,
+                        extra: { style: 'div', valueOid: `${vendor.temp.valueOid}.${idx}`, div },
+                        tracked: plausibleC(c)
                     });
                 }
             }
