@@ -145,7 +145,7 @@ async function pollDevice(device) {
                 }
             } else if (e.kind === 'cpu') {
                 (extra.oids || []).forEach((oid, n) => { oids[`load${n}`] = oid; });
-            } else if (['temp', 'fan', 'power', 'gauge', 'battery', 'runtime', 'outlet'].includes(e.kind)) {
+            } else if (['temp', 'fan', 'power', 'gauge', 'battery', 'runtime', 'outlet', 'meter'].includes(e.kind)) {
                 oids.value = extra.valueOid;
             } else if (extra.style === 'used-free') {
                 oids.used = extra.usedOid;
@@ -237,6 +237,10 @@ async function pollDevice(device) {
             } else if (e.kind === 'runtime') {
                 const sec = scalarVal(job.extra, values.get(job.oids.value));
                 v[0] = (sec != null && sec >= 0 && sec < 1e7) ? sec : null;
+                updates.push({ id: e.id, poll_state: null });
+            } else if (e.kind === 'meter') {
+                const x = scalarVal(job.extra, values.get(job.oids.value));
+                v[0] = (x != null && x >= 0 && x < 1e6) ? x : null;
                 updates.push({ id: e.id, poll_state: null });
             } else if (e.kind === 'outlet') {
                 const st = numOrNull(values.get(job.oids.value));

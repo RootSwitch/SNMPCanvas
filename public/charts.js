@@ -25,7 +25,10 @@
         }
         if (unit === 'bytes') return fmtSI(v, 1024, ['B', 'KiB', 'MiB', 'GiB', 'TiB']);
         if (unit === 'bps') return fmtSI(v, 1000, ['bps', 'kbps', 'Mbps', 'Gbps', 'Tbps']);
-        return fmtSI(v, 1000, ['/s', 'k/s', 'M/s', 'G/s']);
+        if (unit === 'pps') return fmtSI(v, 1000, ['/s', 'k/s', 'M/s', 'G/s']);
+        // Generic meter units (A, V, Hz, ...): print the value with its label.
+        if (unit) return (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2)) + ' ' + unit;
+        return v.toFixed(0);
     }
     function fmtSI(v, base, units) {
         let i = 0;

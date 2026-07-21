@@ -199,7 +199,9 @@ const VENDORS = [
             { kind: 'battery', name: 'Battery charge',    oid: '1.3.6.1.4.1.318.1.1.1.2.2.1.0', div: 1 },
             { kind: 'runtime', name: 'Runtime remaining', oid: '1.3.6.1.4.1.318.1.1.1.2.2.3.0', div: 100 },
             { kind: 'temp',    name: 'Temp: Battery',     oid: '1.3.6.1.4.1.318.1.1.1.2.2.2.0', div: 1 },
-            { kind: 'gauge',   name: 'Output load',       oid: '1.3.6.1.4.1.318.1.1.1.4.2.3.0', div: 1 }
+            { kind: 'gauge',   name: 'Output load',       oid: '1.3.6.1.4.1.318.1.1.1.4.2.3.0', div: 1 },
+            { kind: 'meter',   name: 'Input voltage',     oid: '1.3.6.1.4.1.318.1.1.1.3.2.1.0', div: 1, unit: 'V', max: 260 },
+            { kind: 'meter',   name: 'Output voltage',    oid: '1.3.6.1.4.1.318.1.1.1.4.2.1.0', div: 1, unit: 'V', max: 260 }
         ]
     },
     {
@@ -213,8 +215,16 @@ const VENDORS = [
         label: 'APC Rack PDU (PowerNet)',
         prefix: '1.3.6.1.4.1.318.1.3.4.',
         metrics: [
-            { kind: 'power', name: 'PDU power', oid: '1.3.6.1.4.1.318.1.1.12.1.16.0', div: 1 }
-        ]
+            { kind: 'power', name: 'PDU power',    oid: '1.3.6.1.4.1.318.1.1.12.1.16.0', div: 1 },
+            { kind: 'meter', name: 'Line voltage', oid: '1.3.6.1.4.1.318.1.1.12.1.15.0', div: 1, unit: 'V', max: 260 }
+        ],
+        load: {   // rPDULoadStatusTable - per-phase / per-bank current, tenths of amps
+            style: 'apc-rpdu',
+            loadOid: '1.3.6.1.4.1.318.1.1.12.2.3.1.1.2',    // rPDULoadStatusLoad
+            phaseOid: '1.3.6.1.4.1.318.1.1.12.2.3.1.1.4',   // rPDULoadStatusPhaseNumber
+            bankOid: '1.3.6.1.4.1.318.1.1.12.2.3.1.1.5',    // rPDULoadStatusBankNumber
+            maxAmps: 20
+        }
     }
     // Extension examples (untested, contributions welcome):
     // { key: 'fortinet', prefix: '1.3.6.1.4.1.12356.',

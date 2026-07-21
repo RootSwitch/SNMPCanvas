@@ -325,12 +325,35 @@ async function probe(target) {
                 const ok = m.kind === 'temp' ? plausibleC(val)
                     : (m.kind === 'battery' || m.kind === 'gauge') ? (val >= 0 && val <= 100)
                     : m.kind === 'runtime' ? (val >= 0 && val < 1e7)
-                    : m.kind === 'power' ? (val >= 0 && val < 1e6)
+                    : (m.kind === 'power' || m.kind === 'meter') ? (val >= 0 && val < 1e6)
                     : Number.isFinite(val);
+                const extra = { style: 'div', valueOid: m.oid, div };
+                if (m.unit) extra.unit = m.unit;
+                if (m.max) extra.max = m.max;
                 entities.push({
-                    kind: m.kind, snmpIndex: `v-${m.oid}`, name: m.name,
-                    extra: { style: 'div', valueOid: m.oid, div },
+                    kind: m.kind, snmpIndex: `v-${m.oid}`, name: m.name, extra,
                     tracked: ok
+                });
+            }
+        }
+
+        // APC Rack PDU load: one amps meter per metered phase and per metered
+        // bank. rPDULoadStatusLoad is tenths of amps; the row's phase- and
+        // bank-number columns (0 = not that kind of row) name it. Walking the
+        // table generalizes across single/three-phase and 1..N bank models.
+        if (vendor && vendor.load && vendor.load.style === 'apc-rpdu') {
+            const loads = await walkMap(walkSession, vendor.load.loadOid, warnings, `${vendor.key} load`);
+            const phases = await walkMap(walkSession, vendor.load.phaseOid, warnings, `${vendor.key} load phase`);
+            const banks = await walkMap(walkSession, vendor.load.bankOid, warnings, `${vendor.key} load bank`);
+            for (const [idx, raw] of loads) {
+                const ph = Number(phases.get(idx)) || 0;
+                const bk = Number(banks.get(idx)) || 0;
+                const name = ph > 0 ? `Phase L${ph}` : bk > 0 ? `Bank ${bk}` : `Load ${idx}`;
+                const amps = Number.isFinite(Number(raw)) ? Number(raw) / 10 : null;
+                entities.push({
+                    kind: 'meter', snmpIndex: `load-${idx}`, name,
+                    extra: { style: 'div', valueOid: `${vendor.load.loadOid}.${idx}`, div: 10, unit: 'A', max: vendor.load.maxAmps || 20 },
+                    tracked: amps != null && amps >= 0 && amps < 1000
                 });
             }
         }

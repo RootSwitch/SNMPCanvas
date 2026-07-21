@@ -102,6 +102,7 @@ function entitySummary(e, latest) {
         speedBps: e.speed_bps, tracked: !!e.tracked, export: !!e.export, stale: !!e.stale,
         adminStatus: e.admin_status, operStatus: e.oper_status,
         hc: extra.hc !== undefined ? !!extra.hc : undefined,
+        unit: extra.unit || undefined, meterMax: extra.max || undefined,
         latest: latest ? { ts: latest.ts, status: latest.status, v: [latest.v0, latest.v1, latest.v2, latest.v3, latest.v4, latest.v5] } : null
     };
 }
@@ -389,8 +390,10 @@ const routes = [
             };
             p95 = { in: pct('v0'), out: pct('v1') };
         }
+        const sx = e.extra ? JSON.parse(e.extra) : {};
         ok(res, {
             kind: e.kind, name: e.name, code: e.code || null, speedBps: e.speed_bps, bucketSec: bucket, from, to, p95,
+            unit: sx.unit || undefined, meterMax: sx.max || undefined,
             points: rows.map((r) => [r.t, r.a0, r.m0, r.a1, r.m1, r.a2, r.a3, r.a4, r.a5, r.st])
         });
     } },

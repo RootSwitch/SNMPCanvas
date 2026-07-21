@@ -38,10 +38,10 @@ function fmtUptime(sec) {
 
 // Per-kind display strings, kept SHORT for label lines. A null value keeps
 // the entry with "--" so an authored code never looks like a typo.
-function metricDisplay(kind, name, v0, v1) {
+function metricDisplay(kind, name, v0, v1, extra) {
     const NULL_LABEL = { cpu: 'CPU', mem: 'Mem', fs: 'Disk', temp: 'Temp', fan: 'Fan', power: 'Power', battery: 'Batt', runtime: 'Runtime', outlet: 'Outlet' };
     if (v0 == null) {
-        const label = kind === 'gauge' ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
+        const label = (kind === 'gauge' || kind === 'meter') ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
         return { display: `${label ? label + ' ' : ''}--`, value: null };
     }
     switch (kind) {
@@ -71,6 +71,14 @@ function metricDisplay(kind, name, v0, v1) {
             // Entity names look like "Util: GPU" - reuse the suffix as the label.
             const label = String(name || '').replace(/^Util:\s*/i, '').trim();
             return { display: `${label ? label + ' ' : ''}${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
+        }
+        case 'meter': {
+            // Generic reading in its own unit (amps, volts, ...); the entity
+            // name is the label since there is no fixed kind word.
+            const u = (extra && extra.unit) || '';
+            const shown = Math.abs(v0) >= 100 ? String(Math.round(v0)) : v0.toFixed(1);
+            const label = String(name || '').trim();
+            return { display: `${label ? label + ' ' : ''}${shown}${u ? ' ' + u : ''}`, value: v0, unit: u };
         }
         default: return { display: String(v0), value: v0 };
     }
@@ -118,7 +126,7 @@ function write() {
 
     // --- metrics[] (schema v2): every exported non-interface sensor ---
     const metricRows = db.prepare(`
-        SELECT e.id, e.kind, e.name, e.code, d.name AS device_name, d.status AS device_status
+        SELECT e.id, e.kind, e.name, e.code, e.extra, d.name AS device_name, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id
         WHERE e.export = 1 AND e.kind != 'if'
         ORDER BY d.name, e.kind, e.name`).all();
@@ -127,7 +135,8 @@ function write() {
         const deviceUp = r.device_status === 'up';
         const v0 = deviceUp && s ? s.v0 : null;
         const v1 = deviceUp && s ? s.v1 : null;
-        const fmt = metricDisplay(r.kind, r.name, v0, v1);
+        const extra = r.extra ? JSON.parse(r.extra) : {};
+        const fmt = metricDisplay(r.kind, r.name, v0, v1, extra);
         const out = {
             code: r.code,
             kind: r.kind === 'fs' ? 'disk' : r.kind === 'gauge' ? 'util' : r.kind,

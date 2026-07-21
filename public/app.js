@@ -486,8 +486,8 @@
 
     function renderInventory(r) {
         const inv = document.getElementById('inventory');
-        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets' };
-        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [], fan: [], power: [], gauge: [], battery: [], runtime: [], outlet: [] };
+        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets', meter: 'Meters' };
+        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [], fan: [], power: [], gauge: [], battery: [], runtime: [], outlet: [], meter: [] };
         for (const e of r.entities) byKind[e.kind]?.push(e);
 
         inv.innerHTML = `
@@ -698,6 +698,17 @@
                 <div class="meter"><i class="${pct > 90 ? 'hot' : ''}" style="width:${Math.min(100, pct || 0)}%"></i></div>
             </div>`;
         }
+        if (e.kind === 'meter') {
+            const x = v[0];
+            const unit = e.unit || '';
+            const max = e.meterMax || 100;
+            const shown = x == null ? '-' : (x < 10 ? x.toFixed(2) : x < 100 ? x.toFixed(1) : x.toFixed(0)) + (unit ? ' ' + esc(unit) : '');
+            return `<div class="card" data-eid="${e.id}">
+                <div class="card-title">${esc(e.name)}${chip}</div>
+                <div class="card-value">${shown}</div>
+                <div class="meter"><i style="width:${x == null ? 0 : Math.min(100, x / max * 100)}%"></i></div>
+            </div>`;
+        }
         if (e.kind === 'battery') {
             const pct = v[0];
             // Batteries alarm LOW: red meter at 20% and below.
@@ -744,7 +755,7 @@
     // Track/untrack CPU, memory, storage, and temperature sensors after the
     // add-device wizard (interfaces have their own Track column).
     function manageSensorsModal(deviceId, entities) {
-        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets' };
+        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets', meter: 'Meters' };
         const sensors = entities.filter((e) => e.kind !== 'if');
         $modal.innerHTML = `
         <h2>Sensors</h2>
@@ -765,6 +776,7 @@
                     <span class="grow">${esc(e.name)}</span>
                     ${codeChip(e.code)}
                     ${e.latest && e.latest.v[0] != null && kind === 'temp' ? `<span class="muted small">${e.latest.v[0].toFixed(1)}°C</span>` : ''}
+                    ${e.latest && e.latest.v[0] != null && kind === 'meter' ? `<span class="muted small">${e.latest.v[0].toFixed(e.latest.v[0] < 10 ? 2 : 1)}${e.unit ? ' ' + esc(e.unit) : ''}</span>` : ''}
                 </div>`).join('')}
             </div></div>`;
         }).join('')}
@@ -969,6 +981,15 @@
                 series: [
                     { label: 'Runtime (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
                     { label: 'Runtime (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                ]
+            });
+        } else if (kind === 'meter') {
+            const u = data.unit || '';
+            chartBlock(wrap, data.name || 'Reading', {
+                ...opts, unit: u, yMax: data.meterMax || undefined,
+                series: [
+                    { label: `${u || 'value'} (avg)`, cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
+                    { label: `${u || 'value'} (max)`, cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else {
