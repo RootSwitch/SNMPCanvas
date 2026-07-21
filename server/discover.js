@@ -291,6 +291,25 @@ async function probe(target) {
             }
         }
 
+        // Fan tachometers: vendor RPM tables. Absent bays and stopped fans
+        // read 0, so only spinning fans are tracked at discovery - a running
+        // fan that later drops to 0 still polls and can raise an alarm.
+        if (vendor && vendor.fan) {
+            if (vendor.fan.style === 'walk-rpm') {
+                const rows = await walkMap(walkSession, vendor.fan.rpmOid, warnings, `${vendor.key} fans`);
+                let n = 0;
+                for (const [idx, raw] of rows) {
+                    n++;
+                    const rpm = Number.isFinite(Number(raw)) ? Number(raw) : null;
+                    entities.push({
+                        kind: 'fan', snmpIndex: `v-${idx}`, name: `Fan ${n}`,
+                        extra: { style: 'div', valueOid: `${vendor.fan.rpmOid}.${idx}`, div: 1 },
+                        tracked: rpm != null && rpm > 0 && rpm < 60000
+                    });
+                }
+            }
+        }
+
         // Switched power strips: one entity per outlet (state 1=on, 0=off).
         // Either a walkable per-port column (stateOid) or, for firmware that
         // scatters states across a flat list, explicit per-port instances.

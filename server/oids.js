@@ -179,6 +179,10 @@ const VENDORS = [
             descrOid: '1.3.6.1.4.1.52642.1.1.10.2.1.1.44.1.4',   // sensor name
             valueOid: '1.3.6.1.4.1.52642.1.1.10.2.1.1.44.1.5',   // current °C
             div: 1
+        },
+        fan: {
+            style: 'walk-rpm',
+            rpmOid: '1.3.6.1.4.1.52642.1.1.10.2.1.1.43.1.6'      // fan tachometer, RPM
         }
     }
     // Extension examples (untested, contributions welcome):
