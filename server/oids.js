@@ -201,6 +201,20 @@ const VENDORS = [
             { kind: 'temp',    name: 'Temp: Battery',     oid: '1.3.6.1.4.1.318.1.1.1.2.2.2.0', div: 1 },
             { kind: 'gauge',   name: 'Output load',       oid: '1.3.6.1.4.1.318.1.1.1.4.2.3.0', div: 1 }
         ]
+    },
+    {
+        // APC Rack PDU via PowerNet-MIB (rPDUIdent group). Different device
+        // type from the Smart-UPS, so its own sysObjectID branch. The live
+        // device power (rPDUIdentDevicePower, .12.1.16, corroborated as
+        // line-voltage x phase-current) maps to the power kind. Per-phase and
+        // per-bank current (rPDULoadStatusLoad, tenths of amps) is richer but
+        // has no amps-native kind yet, so it is left for a units pass.
+        key: 'apc-rpdu',
+        label: 'APC Rack PDU (PowerNet)',
+        prefix: '1.3.6.1.4.1.318.1.3.4.',
+        metrics: [
+            { kind: 'power', name: 'PDU power', oid: '1.3.6.1.4.1.318.1.1.12.1.16.0', div: 1 }
+        ]
     }
     // Extension examples (untested, contributions welcome):
     // { key: 'fortinet', prefix: '1.3.6.1.4.1.12356.',
