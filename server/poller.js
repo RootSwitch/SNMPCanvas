@@ -223,19 +223,19 @@ async function pollDevice(device) {
                 v[0] = tempToC(job.extra, sensorRaw(job.extra, values.get(job.oids.value)));
                 updates.push({ id: e.id, poll_state: null });
             } else if (e.kind === 'fan') {
-                const rpm = sensorRaw(job.extra, values.get(job.oids.value));
+                const rpm = scalarVal(job.extra, values.get(job.oids.value));
                 v[0] = (rpm != null && rpm >= 0 && rpm < 60000) ? rpm : null;
                 updates.push({ id: e.id, poll_state: null });
             } else if (e.kind === 'power') {
-                const w = sensorRaw(job.extra, values.get(job.oids.value));
+                const w = scalarVal(job.extra, values.get(job.oids.value));
                 v[0] = (w != null && w >= 0 && w < 1e6) ? w : null;
                 updates.push({ id: e.id, poll_state: null });
             } else if (e.kind === 'gauge' || e.kind === 'battery') {
-                const pct = sensorRaw(job.extra, values.get(job.oids.value));
+                const pct = scalarVal(job.extra, values.get(job.oids.value));
                 v[0] = (pct != null && pct >= 0 && pct <= 100) ? pct : null;
                 updates.push({ id: e.id, poll_state: null });
             } else if (e.kind === 'runtime') {
-                const sec = sensorRaw(job.extra, values.get(job.oids.value));
+                const sec = scalarVal(job.extra, values.get(job.oids.value));
                 v[0] = (sec != null && sec >= 0 && sec < 1e7) ? sec : null;
                 updates.push({ id: e.id, poll_state: null });
             } else if (e.kind === 'outlet') {
@@ -295,6 +295,14 @@ function sensorRaw(extra, value) {
         return Number.isFinite(n) ? n : null;   // "Not Available" -> null
     }
     return numOrNull(value);
+}
+
+// Numeric scalar reading with the entity's divisor applied - vendor scalars
+// reported in tenths, or a runtime in TimeTicks (hundredths of a second).
+// Temperature has its own scale path (tempToC) and must not go through this.
+function scalarVal(extra, value) {
+    const n = sensorRaw(extra, value);
+    return n == null ? null : n / (extra.div || 1);
 }
 
 // Raw sensor reading -> °C by source style; implausible values (unconnected

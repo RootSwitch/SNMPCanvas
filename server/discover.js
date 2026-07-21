@@ -310,6 +310,31 @@ async function probe(target) {
             }
         }
 
+        // Vendor scalar health metrics: a declarative list of single-value
+        // OIDs (battery charge, runtime remaining, output load, ...), each
+        // tagged with its kind and divisor. One GET; a sensor the device
+        // lacks reads null and is skipped, and an implausible reading is
+        // listed untracked rather than dropped, matching the temp styles.
+        if (vendor && Array.isArray(vendor.metrics) && vendor.metrics.length) {
+            const got = await S.get(session, vendor.metrics.map((m) => m.oid));
+            for (const m of vendor.metrics) {
+                const raw = got.get(m.oid);
+                if (raw == null) continue;
+                const div = m.div || 1;
+                const val = Number(raw) / div;
+                const ok = m.kind === 'temp' ? plausibleC(val)
+                    : (m.kind === 'battery' || m.kind === 'gauge') ? (val >= 0 && val <= 100)
+                    : m.kind === 'runtime' ? (val >= 0 && val < 1e7)
+                    : m.kind === 'power' ? (val >= 0 && val < 1e6)
+                    : Number.isFinite(val);
+                entities.push({
+                    kind: m.kind, snmpIndex: `v-${m.oid}`, name: m.name,
+                    extra: { style: 'div', valueOid: m.oid, div },
+                    tracked: ok
+                });
+            }
+        }
+
         // Switched power strips: one entity per outlet (state 1=on, 0=off).
         // Either a walkable per-port column (stateOid) or, for firmware that
         // scatters states across a flat list, explicit per-port instances.

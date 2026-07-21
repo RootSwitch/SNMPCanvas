@@ -184,6 +184,23 @@ const VENDORS = [
             style: 'walk-rpm',
             rpmOid: '1.3.6.1.4.1.52642.1.1.10.2.1.1.43.1.6'      // fan tachometer, RPM
         }
+    },
+    {
+        // APC Smart-UPS via PowerNet-MIB (AP9xxx Network Management Card).
+        // The health scalars live under upsAdvBattery / upsAdvOutput on every
+        // Smart-UPS regardless of chassis; matched by the shared sysObjectID
+        // of NMC-carded units (verified on an SRT2200 and an SMX3000). Runtime
+        // is upsAdvBatteryRunTimeRemaining in TimeTicks (hundredths of a
+        // second), so div 100 turns it into seconds for the runtime kind.
+        key: 'apc-smartups',
+        label: 'APC Smart-UPS (PowerNet)',
+        prefix: '1.3.6.1.4.1.318.1.3.27',
+        metrics: [
+            { kind: 'battery', name: 'Battery charge',    oid: '1.3.6.1.4.1.318.1.1.1.2.2.1.0', div: 1 },
+            { kind: 'runtime', name: 'Runtime remaining', oid: '1.3.6.1.4.1.318.1.1.1.2.2.3.0', div: 100 },
+            { kind: 'temp',    name: 'Temp: Battery',     oid: '1.3.6.1.4.1.318.1.1.1.2.2.2.0', div: 1 },
+            { kind: 'gauge',   name: 'Output load',       oid: '1.3.6.1.4.1.318.1.1.1.4.2.3.0', div: 1 }
+        ]
     }
     // Extension examples (untested, contributions welcome):
     // { key: 'fortinet', prefix: '1.3.6.1.4.1.12356.',
