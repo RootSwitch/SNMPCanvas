@@ -320,6 +320,20 @@ async function probe(target) {
             for (const m of vendor.metrics) {
                 const raw = got.get(m.oid);
                 if (raw == null) continue;
+                if (m.kind === 'state') {
+                    // Enum status scalar normalized at poll time to 0 (ok) /
+                    // 1 (alarm) / null (unknown); the ok/unknown value sets
+                    // and display texts ride along in extra.
+                    const rv = Number(raw);
+                    entities.push({
+                        kind: 'state', snmpIndex: `v-${m.oid}`, name: m.name,
+                        extra: { style: 'state', valueOid: m.oid, okValues: m.ok || [],
+                                 unknownValues: m.unknown || [], okText: m.okText || 'OK',
+                                 alarmText: m.alarmText || 'Alarm' },
+                        tracked: Number.isFinite(rv) && !(m.unknown || []).includes(rv)
+                    });
+                    continue;
+                }
                 const div = m.div || 1;
                 const val = Number(raw) / div;
                 const ok = m.kind === 'temp' ? plausibleC(val)
@@ -333,6 +347,33 @@ async function probe(target) {
                 entities.push({
                     kind: m.kind, snmpIndex: `v-${m.oid}`, name: m.name, extra,
                     tracked: ok
+                });
+            }
+        }
+
+        // Standard UPS-MIB (RFC 1628) power source: any network-managed UPS
+        // that answers it gets an on-battery state entity, vendor entry or
+        // not (Eaton, Schneider, ...). Skipped when a vendor metric already
+        // supplied one (APC NMCs answer both trees - avoid the duplicate).
+        if (!entities.some((e) => e.kind === 'state')) {
+            let raw = null;
+            try {
+                const got = await S.get(session, [O.UPS_MIB.outputSource]);
+                raw = got.get(O.UPS_MIB.outputSource);
+            } catch (err) {
+                // Probing a non-UPS: a missing OID is a null varbind, but a
+                // flaky agent that errors the whole request must not sink an
+                // otherwise-complete discovery.
+                warnings.push(`UPS-MIB check skipped: ${err.message}`);
+            }
+            if (raw != null) {
+                const rv = Number(raw);
+                entities.push({
+                    kind: 'state', snmpIndex: 'v-upsmib-source', name: 'Power',
+                    extra: { style: 'state', valueOid: O.UPS_MIB.outputSource,
+                             okValues: [3], unknownValues: [1], okText: 'Online',
+                             alarmText: 'On battery' },
+                    tracked: Number.isFinite(rv) && rv !== 1
                 });
             }
         }

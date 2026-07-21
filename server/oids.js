@@ -27,6 +27,11 @@ const IF = {
     ifOutErrors:    '1.3.6.1.2.1.2.2.1.20'
 };
 
+// --- UPS-MIB (RFC 1628) - answered by most network-managed UPSes ---
+const UPS_MIB = {
+    outputSource: '1.3.6.1.2.1.33.1.4.1.0'   // 3 = normal, 5 = battery; 1 = other/unknown
+};
+
 // --- IF-MIB ifXTable (same ifIndex; 64-bit counters + nicer names) ---
 const IFX = {
     ifName:       '1.3.6.1.2.1.31.1.1.1.1',
@@ -201,8 +206,19 @@ const VENDORS = [
             { kind: 'temp',    name: 'Temp: Battery',     oid: '1.3.6.1.4.1.318.1.1.1.2.2.2.0', div: 1 },
             { kind: 'gauge',   name: 'Output load',       oid: '1.3.6.1.4.1.318.1.1.1.4.2.3.0', div: 1 },
             { kind: 'meter',   name: 'Input voltage',     oid: '1.3.6.1.4.1.318.1.1.1.3.2.1.0', div: 1, unit: 'V', max: 260 },
-            { kind: 'meter',   name: 'Output voltage',    oid: '1.3.6.1.4.1.318.1.1.1.4.2.1.0', div: 1, unit: 'V', max: 260 }
-        ]
+            { kind: 'meter',   name: 'Output voltage',    oid: '1.3.6.1.4.1.318.1.1.1.4.2.1.0', div: 1, unit: 'V', max: 260 },
+            // upsBasicOutputStatus: 2 = onLine, 3 = onBattery; boost/trim/
+            // bypass/etc. also read as the alarm state (any not-online source
+            // is worth an eyebrow), 1 = unknown reads as no data.
+            { kind: 'state',   name: 'Power',             oid: '1.3.6.1.4.1.318.1.1.1.4.1.1.0',
+              ok: [2], unknown: [1], okText: 'Online', alarmText: 'On battery' }
+        ],
+        temp: {   // AP9641 universal I/O temp probes (uioSensorStatusTable, already degC)
+            style: 'walk-descr-value',
+            descrOid: '1.3.6.1.4.1.318.1.1.25.1.2.1.3',
+            valueOid: '1.3.6.1.4.1.318.1.1.25.1.2.1.6',
+            div: 1
+        }
     },
     {
         // APC Rack PDU via PowerNet-MIB (rPDUIdent group). Different device
@@ -255,4 +271,4 @@ function matchVendor(sysObjectID, sysDescr) {
     return null;
 }
 
-module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, NSEXTEND_OUTPUT, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, VENDORS, matchVendor };
+module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, NSEXTEND_OUTPUT, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, UPS_MIB, VENDORS, matchVendor };

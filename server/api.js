@@ -103,6 +103,7 @@ function entitySummary(e, latest) {
         adminStatus: e.admin_status, operStatus: e.oper_status,
         hc: extra.hc !== undefined ? !!extra.hc : undefined,
         unit: extra.unit || undefined, meterMax: extra.max || undefined,
+        okText: extra.okText || undefined, alarmText: extra.alarmText || undefined,
         latest: latest ? { ts: latest.ts, status: latest.status, v: [latest.v0, latest.v1, latest.v2, latest.v3, latest.v4, latest.v5] } : null
     };
 }
@@ -394,6 +395,7 @@ const routes = [
         ok(res, {
             kind: e.kind, name: e.name, code: e.code || null, speedBps: e.speed_bps, bucketSec: bucket, from, to, p95,
             unit: sx.unit || undefined, meterMax: sx.max || undefined,
+            okText: sx.okText || undefined, alarmText: sx.alarmText || undefined,
             points: rows.map((r) => [r.t, r.a0, r.m0, r.a1, r.m1, r.a2, r.a3, r.a4, r.a5, r.st])
         });
     } },

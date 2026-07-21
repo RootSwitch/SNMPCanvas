@@ -145,7 +145,7 @@ async function pollDevice(device) {
                 }
             } else if (e.kind === 'cpu') {
                 (extra.oids || []).forEach((oid, n) => { oids[`load${n}`] = oid; });
-            } else if (['temp', 'fan', 'power', 'gauge', 'battery', 'runtime', 'outlet', 'meter'].includes(e.kind)) {
+            } else if (['temp', 'fan', 'power', 'gauge', 'battery', 'runtime', 'outlet', 'meter', 'state'].includes(e.kind)) {
                 oids.value = extra.valueOid;
             } else if (extra.style === 'used-free') {
                 oids.used = extra.usedOid;
@@ -246,6 +246,15 @@ async function pollDevice(device) {
                 const st = numOrNull(values.get(job.oids.value));
                 v[0] = st == null ? null : (st ? 1 : 0);
                 status = v[0] == null ? null : (v[0] ? 1 : 2);   // reuse up/down badge semantics
+                updates.push({ id: e.id, oper_status: status, poll_state: null });
+            } else if (e.kind === 'state') {
+                // Enum -> 0 (ok) / 1 (alarm) / null (unknown) via the value
+                // sets discovery stored; alarm shows the down badge.
+                const raw = numOrNull(values.get(job.oids.value));
+                const unknown = job.extra.unknownValues || [];
+                if (raw == null || unknown.includes(raw)) { v[0] = null; }
+                else { v[0] = (job.extra.okValues || []).includes(raw) ? 0 : 1; }
+                status = v[0] == null ? null : (v[0] ? 2 : 1);
                 updates.push({ id: e.id, oper_status: status, poll_state: null });
             } else if (job.extra.style === 'used-free') {
                 const used = numOrNull(values.get(job.oids.used));

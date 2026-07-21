@@ -41,7 +41,8 @@ function fmtUptime(sec) {
 function metricDisplay(kind, name, v0, v1, extra) {
     const NULL_LABEL = { cpu: 'CPU', mem: 'Mem', fs: 'Disk', temp: 'Temp', fan: 'Fan', power: 'Power', battery: 'Batt', runtime: 'Runtime', outlet: 'Outlet' };
     if (v0 == null) {
-        const label = (kind === 'gauge' || kind === 'meter') ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
+        const label = (kind === 'gauge' || kind === 'meter' || kind === 'state')
+            ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
         return { display: `${label ? label + ' ' : ''}--`, value: null };
     }
     switch (kind) {
@@ -79,6 +80,13 @@ function metricDisplay(kind, name, v0, v1, extra) {
             const shown = Math.abs(v0) >= 100 ? String(Math.round(v0)) : v0.toFixed(1);
             const label = String(name || '').trim();
             return { display: `${label ? label + ' ' : ''}${shown}${u ? ' ' + u : ''}`, value: v0, unit: u };
+        }
+        case 'state': {
+            // Binary status: 0 ok / 1 alarm, shown with the entity's own
+            // wording ("Power Online" / "Power On battery").
+            const label = String(name || '').trim();
+            const txt = v0 ? ((extra && extra.alarmText) || 'Alarm') : ((extra && extra.okText) || 'OK');
+            return { display: `${label ? label + ' ' : ''}${txt}`, value: v0 ? 1 : 0 };
         }
         default: return { display: String(v0), value: v0 };
     }
@@ -151,6 +159,11 @@ function write() {
         // kinds today, but battery is the likely next coloring gate.
         if (r.kind === 'battery') {
             out.status = v0 == null ? 'unknown' : v0 <= 20 ? 'crit' : v0 <= 50 ? 'warn' : 'ok';
+        }
+        // Same forward-safe contract: an alarm state (on battery, failed fan)
+        // is the clearest coloring gate a kiosk could want.
+        if (r.kind === 'state') {
+            out.status = v0 == null ? 'unknown' : v0 ? 'crit' : 'ok';
         }
         return out;
     });

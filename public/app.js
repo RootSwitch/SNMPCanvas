@@ -486,8 +486,8 @@
 
     function renderInventory(r) {
         const inv = document.getElementById('inventory');
-        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets', meter: 'Meters' };
-        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [], fan: [], power: [], gauge: [], battery: [], runtime: [], outlet: [], meter: [] };
+        const groups = { if: 'Interfaces', cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets', meter: 'Meters', state: 'Status' };
+        const byKind = { if: [], cpu: [], mem: [], fs: [], temp: [], fan: [], power: [], gauge: [], battery: [], runtime: [], outlet: [], meter: [], state: [] };
         for (const e of r.entities) byKind[e.kind]?.push(e);
 
         inv.innerHTML = `
@@ -726,6 +726,15 @@
                 <div class="meter"><i class="${on === 0 ? 'hot' : ''}" style="width:${on == null ? 0 : 100}%"></i></div>
             </div>`;
         }
+        if (e.kind === 'state') {
+            const st = v[0];   // 0 ok, 1 alarm, null unknown
+            const txt = st == null ? '-' : st ? (e.alarmText || 'Alarm') : (e.okText || 'OK');
+            return `<div class="card" data-eid="${e.id}">
+                <div class="card-title">${esc(e.name)}${chip}</div>
+                <div class="card-value">${esc(txt)}</div>
+                <div class="meter"><i class="${st === 1 ? 'hot' : ''}" style="width:${st == null ? 0 : 100}%"></i></div>
+            </div>`;
+        }
         if (e.kind === 'runtime') {
             const sec = v[0];
             return `<div class="card" data-eid="${e.id}">
@@ -755,7 +764,7 @@
     // Track/untrack CPU, memory, storage, and temperature sensors after the
     // add-device wizard (interfaces have their own Track column).
     function manageSensorsModal(deviceId, entities) {
-        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets', meter: 'Meters' };
+        const kinds = { cpu: 'CPU', mem: 'Memory', fs: 'Storage', temp: 'Temperatures', fan: 'Fans', power: 'Power', gauge: 'Utilization', battery: 'Battery', runtime: 'Runtime', outlet: 'Outlets', meter: 'Meters', state: 'Status' };
         const sensors = entities.filter((e) => e.kind !== 'if');
         $modal.innerHTML = `
         <h2>Sensors</h2>
@@ -777,6 +786,7 @@
                     ${codeChip(e.code)}
                     ${e.latest && e.latest.v[0] != null && kind === 'temp' ? `<span class="muted small">${e.latest.v[0].toFixed(1)}°C</span>` : ''}
                     ${e.latest && e.latest.v[0] != null && kind === 'meter' ? `<span class="muted small">${e.latest.v[0].toFixed(e.latest.v[0] < 10 ? 2 : 1)}${e.unit ? ' ' + esc(e.unit) : ''}</span>` : ''}
+                    ${e.latest && e.latest.v[0] != null && kind === 'state' ? `<span class="muted small">${esc(e.latest.v[0] ? (e.alarmText || 'Alarm') : (e.okText || 'OK'))}</span>` : ''}
                 </div>`).join('')}
             </div></div>`;
         }).join('')}
@@ -990,6 +1000,17 @@
                 series: [
                     { label: `${u || 'value'} (avg)`, cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
                     { label: `${u || 'value'} (max)`, cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                ]
+            });
+        } else if (kind === 'state') {
+            // 0/1 step-ish history; the bucket avg reads as "fraction of the
+            // interval spent in the alarm state", max marks any excursion.
+            const alarm = data.alarmText || 'Alarm';
+            chartBlock(wrap, data.name || 'Status', {
+                ...opts, unit: '', yMax: 1,
+                series: [
+                    { label: `${alarm} (avg)`, cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
+                    { label: `${alarm} (max)`, cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else {
