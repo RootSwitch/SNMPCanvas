@@ -464,6 +464,7 @@ const routes = [
         if (!auth.checkPassword(String(body.current || ''))) return json(res, 401, { error: 'Current password is wrong.' });
         if (!body.next || String(body.next).length < 8) return bad(res, 'New password must be at least 8 characters.');
         auth.setPassword(String(body.next));
+        auth.destroyOtherSessions(auth.tokenFromRequest(req));   // evict any stolen cookie
         ok(res);
     } }
 ];

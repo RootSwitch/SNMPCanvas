@@ -52,7 +52,7 @@ function serveStatic(req, res, pathname) {
     if (pathname === '/') pathname = '/index.html';
     // Resolve inside public/ only.
     const file = path.normalize(path.join(PUBLIC_DIR, pathname));
-    if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end(); return; }
+    if (file !== PUBLIC_DIR && !file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); res.end(); return; }
     fs.stat(file, (err, stat) => {
         if (err || !stat.isFile()) { res.writeHead(404); res.end('not found'); return; }
         const ext = path.extname(file).toLowerCase();
