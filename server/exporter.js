@@ -184,6 +184,19 @@ function write() {
         });
     }
 
+    // --- devices[] (schema v3): the up/down roster ---
+    // Every device contributing ANYTHING to this feed (an interface, a
+    // sensor, or just its uptime), with its reachability status. Consumers
+    // that alert on device-down can rule off this instead of fishing device
+    // blocks out of interface entries - which only covered devices that
+    // happened to export an interface.
+    const devices = db.prepare(`
+        SELECT DISTINCT d.name, d.host, d.status FROM devices d
+        LEFT JOIN entities e ON e.device_id = d.id AND e.export = 1
+        WHERE e.id IS NOT NULL OR d.export_uptime = 1
+        ORDER BY d.name`).all()
+        .map((d) => ({ name: d.name, host: d.host, status: d.status || 'unknown' }));
+
     // Advertise the poll cadence so the consumer's staleness threshold matches
     // this instance's actual refresh rhythm. Without it the PingCanvas kiosk
     // assumes 30s and grays the overlay permanently for any cadence over ~60s -
@@ -193,10 +206,11 @@ function write() {
     const maxDeviceInterval = db.prepare(
         'SELECT MAX(poll_interval_s) AS m FROM devices WHERE poll_interval_s IS NOT NULL').get().m || 0;
     const doc = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         generator: `snmpcanvas/${pkg.version}`,
         generatedAt: new Date().toISOString(),
         pollIntervalSec: Math.max(globalInterval, maxDeviceInterval),
+        devices,
         interfaces,
         metrics
     };
