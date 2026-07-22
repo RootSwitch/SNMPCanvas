@@ -63,13 +63,16 @@ function clientIp(req) {
     // socket.remoteAddress alone would let one attacker's failures lock out
     // everyone. Honor X-Forwarded-For ONLY when the operator asserts a trusted
     // proxy via TRUST_PROXY=1; otherwise a client could spoof the header to
-    // evade the limiter or lock out an arbitrary IP. Take the first hop (the
-    // original client) that a trusted proxy prepends.
+    // evade the limiter or lock out an arbitrary IP.
     if (process.env.TRUST_PROXY === '1') {
         const xff = req.headers['x-forwarded-for'];
         if (xff) {
-            const first = String(xff).split(',')[0].trim();
-            if (first) { return first; }
+            // A trusted proxy APPENDS the client IP it observed, so the LAST
+            // hop is the one this operator's proxy vouches for; earlier hops are
+            // client-supplied and spoofable. Assumes a single reverse proxy -
+            // the documented topology.
+            const hops = String(xff).split(',').map((s) => s.trim()).filter(Boolean);
+            if (hops.length) { return hops[hops.length - 1]; }
         }
     }
     return req.socket.remoteAddress || 'unknown';

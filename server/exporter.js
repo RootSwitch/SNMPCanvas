@@ -112,7 +112,7 @@ function write() {
         SELECT e.id, e.snmp_index, e.name, e.alias, e.speed_bps, e.admin_status, e.oper_status, e.code,
                d.name AS device_name, d.host, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id
-        WHERE e.export = 1 AND e.kind = 'if'
+        WHERE e.export = 1 AND e.kind = 'if' AND d.enabled = 1
         ORDER BY d.name, e.name`).all();
     const interfaces = ifRows.map((r) => {
         const s = latest.get(r.id);
@@ -141,7 +141,7 @@ function write() {
     const metricRows = db.prepare(`
         SELECT e.id, e.kind, e.name, e.code, e.extra, d.name AS device_name, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id
-        WHERE e.export = 1 AND e.kind != 'if'
+        WHERE e.export = 1 AND e.kind != 'if' AND d.enabled = 1
         ORDER BY d.name, e.kind, e.name`).all();
     const metrics = metricRows.map((r) => {
         const s = latest.get(r.id);
@@ -175,7 +175,7 @@ function write() {
 
     // --- device uptime metrics ---
     const now = Math.floor(Date.now() / 1000);
-    for (const d of db.prepare('SELECT * FROM devices WHERE export_uptime = 1 ORDER BY name').all()) {
+    for (const d of db.prepare('SELECT * FROM devices WHERE export_uptime = 1 AND enabled = 1 ORDER BY name').all()) {
         const up = d.status === 'up' && d.last_sysuptime_cs != null;
         const sec = up ? Math.floor(d.last_sysuptime_cs / 100) + Math.max(0, now - (d.last_seen_ts || now)) : null;
         metrics.push({
@@ -190,15 +190,17 @@ function write() {
     }
 
     // --- devices[] (schema v3): the up/down roster ---
-    // Every device contributing ANYTHING to this feed (an interface, a
-    // sensor, or just its uptime), with its reachability status. Consumers
-    // that alert on device-down can rule off this instead of fishing device
-    // blocks out of interface entries - which only covered devices that
-    // happened to export an interface.
+    // Every ENABLED device contributing ANYTHING to this feed (an interface, a
+    // sensor, or just its uptime), with its reachability status. Consumers that
+    // alert on device-down can rule off this instead of fishing device blocks
+    // out of interface entries - which only covered devices that happened to
+    // export an interface. A disabled device is dropped entirely (it isn't
+    // polled, so its stored status is stale) - the wall shows it unmonitored
+    // rather than a frozen green, and no false device-down fires.
     const devices = db.prepare(`
         SELECT DISTINCT d.name, d.host, d.status FROM devices d
         LEFT JOIN entities e ON e.device_id = d.id AND e.export = 1
-        WHERE e.id IS NOT NULL OR d.export_uptime = 1
+        WHERE d.enabled = 1 AND (e.id IS NOT NULL OR d.export_uptime = 1)
         ORDER BY d.name`).all()
         .map((d) => ({ name: d.name, host: d.host, status: d.status || 'unknown' }));
 

@@ -244,10 +244,10 @@ machine (or restore a backup):
 `SNMPCANVAS_SECRET` does not retroactively encrypt credentials already stored in
 cleartext (encryption happens when a credential is written, not at startup). But
 you don't have to start over: set the secret, then **re-save each device's
-credentials** (Edit device -> Save, e.g. when you change a community off
-`public`). That write encrypts them. Re-saving credentials leaves the interface
-`code`s untouched, so any PingCanvas board bound to those codes keeps working -
-no board changes, no history lost.
+credentials** (Edit device -> **Change credentials** -> enter them -> Save, e.g.
+when you change a community off `public`). That write encrypts them. Re-saving
+credentials leaves the interface `code`s untouched, so any PingCanvas board bound
+to those codes keeps working - no board changes, no history lost.
 
 ## snmp-status.json
 

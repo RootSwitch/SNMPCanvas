@@ -833,6 +833,13 @@
             <label style="align-self:start">Notes</label>
             <textarea id="e-notes" rows="3" placeholder="anything worth remembering about this device">${esc(d.notes)}</textarea>
         </div>
+        <details class="cred-edit" style="margin-top:10px">
+            <summary>Change credentials (${esc(d.snmpVersion)})</summary>
+            <div class="section-note">Leave blank to keep the stored credentials. Enter new ones to rotate
+                them - e.g. changing a community off <code>public</code> - which also encrypts them at rest
+                when SNMPCANVAS_SECRET is set. The interface codes are unchanged, so any board keeps working.</div>
+            <div class="form-grid">${credFieldsHtml()}</div>
+        </details>
         <div class="form-actions">
             <button class="btn-primary" id="e-save">Save</button>
             <button id="e-cancel">Cancel</button>
@@ -841,16 +848,33 @@
         </div>
         <div class="error-text" id="e-err" style="margin-top:8px"></div>`;
         $modal.showModal();
+        // The device's SNMP version is fixed (the backend keys credential
+        // encoding off the stored version); show only that version's fields,
+        // blank, and lock the selector.
+        document.getElementById('f-version').value = d.snmpVersion;
+        document.getElementById('f-version').disabled = true;
+        document.getElementById('f-community').value = '';
+        document.getElementById('f-community').placeholder = 'unchanged';
+        wireCredToggle();
+        document.getElementById('f-version').dispatchEvent(new Event('change'));
         document.getElementById('e-cancel').addEventListener('click', () => $modal.close());
         document.getElementById('e-save').addEventListener('click', async () => {
             try {
-                await api('PATCH', `/api/devices/${d.id}`, {
+                const patch = {
                     name: document.getElementById('e-name').value,
                     pollIntervalS: document.getElementById('e-interval').value || null,
                     enabled: document.getElementById('e-enabled').checked,
                     exportUptime: document.getElementById('e-uptime').checked,
                     notes: document.getElementById('e-notes').value
-                });
+                };
+                // Only send credentials when the operator actually entered new
+                // ones - a blank section leaves the stored credentials untouched.
+                const creds = readCreds();
+                const dirty = d.snmpVersion === '2c'
+                    ? creds.community.trim() !== ''
+                    : (creds.v3_user.trim() !== '' || creds.v3_auth_key !== '' || creds.v3_priv_key !== '');
+                if (dirty) patch.credentials = creds;
+                await api('PATCH', `/api/devices/${d.id}`, patch);
                 $modal.close();
                 renderDevice(d.id);
             } catch (e) { document.getElementById('e-err').textContent = e.message; }
