@@ -344,19 +344,22 @@ function rate(cur, prev, elapsedSec, is64, mult) {
     return Number(delta) * mult / elapsedSec;
 }
 
-const insertSample = () => db.prepare(
+// Prepared once at load (schema exists by then - db.js builds it on require);
+// re-preparing per poll cycle recompiled the SQL for every device, every cycle.
+const insertSample = db.prepare(
     'INSERT OR REPLACE INTO samples (entity_id, ts, status, v0, v1, v2, v3, v4, v5) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+const updEntityStmt = db.prepare(`UPDATE entities SET
+    oper_status = COALESCE(@oper_status, oper_status),
+    admin_status = COALESCE(@admin_status, admin_status),
+    alias = COALESCE(@alias, alias),
+    speed_bps = COALESCE(@speed_bps, speed_bps),
+    stale = COALESCE(@stale, stale),
+    poll_state = @poll_state
+    WHERE id = @id`);
 
 function persistPoll(device, nowS, uptimeCs, rows, updates) {
-    const ins = insertSample();
-    const updEntity = db.prepare(`UPDATE entities SET
-        oper_status = COALESCE(@oper_status, oper_status),
-        admin_status = COALESCE(@admin_status, admin_status),
-        alias = COALESCE(@alias, alias),
-        speed_bps = COALESCE(@speed_bps, speed_bps),
-        stale = COALESCE(@stale, stale),
-        poll_state = @poll_state
-        WHERE id = @id`);
+    const ins = insertSample;
+    const updEntity = updEntityStmt;
     db.transaction(() => {
         for (const r of rows) ins.run(r.entityId, nowS, r.status, ...r.v);
         for (const u of updates) {

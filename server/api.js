@@ -82,6 +82,16 @@ function effectiveInterval(device) {
     return device.poll_interval_s || parseInt(getSetting('poll_interval_s'), 10) || 300;
 }
 
+// pollIntervalS from a request body -> seconds (clamped to >= 30), null to
+// clear back to the global default, or NaN for garbage the caller must reject
+// (parseInt('junk') used to coerce to the 30s floor silently).
+function intervalFromBody(v) {
+    if (v == null || v === '' || v === 0 || v === false) return null;
+    const n = parseInt(v, 10);
+    if (Number.isNaN(n)) return NaN;
+    return n <= 0 ? null : Math.max(30, n);
+}
+
 // Uptime for display: last known sysUpTime plus wall time since, while up.
 function uptimeSeconds(device) {
     if (device.status !== 'up' || device.last_sysuptime_cs == null) return null;
@@ -225,7 +235,8 @@ const routes = [
         const { target, result } = probe;
         const name = String(body.name || result.system.sysName || target.host).trim() || target.host;
         const chosen = new Map((Array.isArray(body.entities) ? body.entities : []).map((e) => [`${e.kind}:${e.snmpIndex}`, !!e.tracked]));
-        const interval = body.pollIntervalS ? Math.max(30, parseInt(body.pollIntervalS, 10) || 0) || null : null;
+        const interval = intervalFromBody(body.pollIntervalS);
+        if (Number.isNaN(interval)) return bad(res, 'Polling interval must be a number of seconds.');
 
         const deviceId = db.transaction(() => {
             const info = db.prepare(`INSERT INTO devices
@@ -266,8 +277,9 @@ const routes = [
         const name = body.name !== undefined ? String(body.name).trim() : d.name;
         if (!name) return bad(res, 'Name cannot be empty.');
         const interval = body.pollIntervalS !== undefined
-            ? (body.pollIntervalS ? Math.max(30, parseInt(body.pollIntervalS, 10) || 0) || null : null)
+            ? intervalFromBody(body.pollIntervalS)
             : d.poll_interval_s;
+        if (Number.isNaN(interval)) return bad(res, 'Polling interval must be a number of seconds.');
         const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : d.enabled;
         const notes = body.notes !== undefined ? String(body.notes).slice(0, 2000) : d.notes;
         const exportUptime = body.exportUptime !== undefined ? (body.exportUptime ? 1 : 0) : d.export_uptime;
@@ -422,10 +434,19 @@ const routes = [
 
     // Consistent snapshot of the database, streamed as a download.
     { method: 'GET', path: /^\/api\/backup$/, handler: (req, res) => {
-        const tmp = path.join(DATA_DIR, `.backup-${Date.now()}.db`);
-        db.prepare('VACUUM INTO ?').run(tmp);
+        // Random suffix: two same-ms requests must not collide, and every
+        // error/abort path must unlink - orphaned full-DB copies would
+        // slowly fill the data volume on a flaky connection.
+        const tmp = path.join(DATA_DIR, `.backup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.db`);
+        let stat;
+        try {
+            db.prepare('VACUUM INTO ?').run(tmp);
+            stat = fs.statSync(tmp);
+        } catch (err) {
+            fs.unlink(tmp, () => {});
+            throw err;
+        }
         const stamp = new Date().toISOString().slice(0, 10);
-        const stat = fs.statSync(tmp);
         res.writeHead(200, {
             'Content-Type': 'application/octet-stream',
             'Content-Length': stat.size,
@@ -433,9 +454,10 @@ const routes = [
             'Cache-Control': 'no-store'
         });
         const stream = fs.createReadStream(tmp);
-        const cleanup = () => fs.unlink(tmp, () => {});
-        stream.on('close', cleanup);
+        const cleanup = () => { stream.destroy(); fs.unlink(tmp, () => {}); };
+        stream.on('close', () => fs.unlink(tmp, () => {}));
         stream.on('error', cleanup);
+        res.on('close', cleanup); // client abort mid-download
         stream.pipe(res);
     } },
 
@@ -494,7 +516,8 @@ async function handle(req, res, pathname, query) {
         let body = {};
         if (req.method === 'POST' || req.method === 'PATCH' || req.method === 'DELETE') {
             const ct = String(req.headers['content-type'] || '');
-            const hasBody = req.headers['content-length'] && req.headers['content-length'] !== '0';
+            const hasBody = req.headers['transfer-encoding'] !== undefined ||
+                (req.headers['content-length'] && req.headers['content-length'] !== '0');
             if (hasBody && !ct.includes('application/json')) return json(res, 415, { error: 'expected application/json' });
             if (hasBody) {
                 try {
