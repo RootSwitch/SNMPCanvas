@@ -131,7 +131,7 @@ const routes = [
     { method: 'GET', path: /^\/api\/health$/, authRequired: false, handler: (req, res) => ok(res, { ok: true, version: require('../package.json').version }) },
 
     { method: 'GET', path: /^\/api\/session$/, authRequired: false, handler: (req, res) => {
-        const authed = auth.authenticate(req, res);
+        const authed = auth.authenticate(req);
         ok(res, { authenticated: authed, needsSetup: !auth.passwordIsSet() });
     } },
 
@@ -484,7 +484,7 @@ async function handle(req, res, pathname, query) {
         const m = route.path.exec(pathname);
         if (!m) continue;
 
-        if (route.authRequired !== false && !auth.authenticate(req, res)) {
+        if (route.authRequired !== false && !auth.authenticate(req)) {
             return json(res, 401, { error: 'authentication required' });
         }
 
