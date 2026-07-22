@@ -43,7 +43,12 @@ function metricDisplay(kind, name, v0, v1, extra) {
     if (v0 == null) {
         const label = (kind === 'gauge' || kind === 'meter' || kind === 'state')
             ? String(name || '').replace(/^Util:\s*/i, '').trim() : NULL_LABEL[kind];
-        return { display: `${label ? label + ' ' : ''}--`, value: null };
+        // Keep the unit even with no reading: consumers label thresholds with
+        // it ("warn >= 85%"), and a device being down should not strip the %
+        // off the rule next to it.
+        const NULL_UNIT = { cpu: '%', mem: '%', fs: '%', battery: '%', gauge: '%', temp: 'C', fan: 'rpm', power: 'W', runtime: 's' };
+        const u = kind === 'meter' ? ((extra && extra.unit) || '') : (NULL_UNIT[kind] || '');
+        return { display: `${label ? label + ' ' : ''}--`, value: null, unit: u || undefined };
     }
     switch (kind) {
         case 'cpu': return { display: `CPU ${Math.round(v0)}%`, value: Math.round(v0), unit: '%' };
