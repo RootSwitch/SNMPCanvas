@@ -14,8 +14,11 @@ performance history - including an export file PingCanvas reads directly,
 overlaying live values onto board labels and connections (schema below).
 [**AlertCanvas**](https://github.com/RootSwitch/AlertCanvas) reads the same
 export and turns it into raise/clear notifications (email, ntfy, syslog),
-and [**SyslogCanvas**](https://github.com/RootSwitch/SyslogCanvas) collects
-syslog and SNMP traps from the same gear.
+[**SyslogCanvas**](https://github.com/RootSwitch/SyslogCanvas) collects
+syslog and SNMP traps from the same gear, and
+[**LaunchCanvas**](https://github.com/RootSwitch/LaunchCanvas) is the
+suite's front door - one login for every app, a tile launcher, and the
+suite's quickstart docs.
 
 Unlike CrossCanvas and PingCanvas, SNMPCanvas has a backend: polling needs
 a process that outlives a browser tab, and history needs somewhere to live. The family's
@@ -183,6 +186,7 @@ Node 20+: `npm install && npm start` (listens on `:9161`, data in `./data`).
 | `TLS_CERT` / `TLS_KEY` | `$DATA/certs/server.crt|key` | PEM cert/key pair; HTTPS turns on when both exist |
 | `ADMIN_PASSWORD` | - | Pre-set the UI password (otherwise first-run setup page) |
 | `SNMPCANVAS_SECRET` | - | If set, SNMP credentials are AES-256-GCM encrypted at rest |
+| `SUITE_SECRET` | - | Opt-in suite single sign-on: accept signed login tokens from the [LaunchCanvas](https://github.com/RootSwitch/LaunchCanvas) portal (same value across the suite; see its README for the security model) |
 | `POLL_CONCURRENCY` | `4` | Max devices polled simultaneously |
 | `COOKIE_SECURE` | auto | `Secure` cookies: on with HTTPS, off with HTTP; set to override |
 | `TZ` | UTC | Timezone for the nightly prune and log timestamps |
@@ -212,6 +216,13 @@ SNMPCanvas is a networked app with a small, deliberate threat model:
   segment; a reverse proxy adds TLS termination and extra auth cleanly if
   you want to go further. The first-run setup page belongs to whoever
   reaches it first - claim it promptly or pre-set `ADMIN_PASSWORD`.
+- With `SUITE_SECRET` set, a signed token minted by the
+  [LaunchCanvas](https://github.com/RootSwitch/LaunchCanvas) portal also
+  signs you in (verified per request, no local session minted). Anyone
+  holding that secret can mint valid tokens, so treat it like the other
+  suite secrets; the LaunchCanvas README documents the full model,
+  including revocation and the host-wide cookie caveat. Unset, the token
+  path is inert.
 - SNMP polls leave the container as outbound UDP/161 through Docker's NAT,
   so devices see the **docker host's** IP. If your devices restrict SNMP by
   source address, allow the host IP - or run the container with
@@ -473,6 +484,6 @@ sister project.
 ## License
 
 [The Unlicense](LICENSE) - public domain, same as CrossCanvas, PingCanvas,
-SyslogCanvas, and AlertCanvas. Use it, fork it, ship it at work, no attribution required.
+SyslogCanvas, AlertCanvas, and LaunchCanvas. Use it, fork it, ship it at work, no attribution required.
 (Dependencies keep their own MIT licenses in `node_modules/` when you
 install or ship an image.)
