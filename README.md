@@ -12,8 +12,10 @@ network, [**PingCanvas**](https://github.com/RootSwitch/PingCanvas) turns
 those diagrams into a live reachability wall, and SNMPCanvas adds the
 performance history - including an export file PingCanvas reads directly,
 overlaying live values onto board labels and connections (schema below).
-A fourth sibling, [**SyslogCanvas**](https://github.com/RootSwitch/SyslogCanvas),
-collects syslog and SNMP traps from the same gear.
+[**AlertCanvas**](https://github.com/RootSwitch/AlertCanvas) reads the same
+export and turns it into raise/clear notifications (email, ntfy, syslog),
+and [**SyslogCanvas**](https://github.com/RootSwitch/SyslogCanvas) collects
+syslog and SNMP traps from the same gear.
 
 Unlike CrossCanvas and PingCanvas, SNMPCanvas has a backend: polling needs
 a process that outlives a browser tab, and history needs somewhere to live. The family's
@@ -105,7 +107,8 @@ docker compose up -d
 Open `http://host:9161`, set the admin password on the first-run page, and
 add a device. That's the whole install. (The default port is a nod to SNMP's
 UDP/161, picked to coexist quietly with common home-lab neighbors like
-Uptime Kuma on 3001 and CrossCanvas/PingCanvas on 8080/8443.)
+Uptime Kuma on 3001, CrossCanvas/PingCanvas on 8080/8443, and AlertCanvas
+next door on 9162.)
 
 Two first-run notes: the setup page belongs to whoever reaches the port
 first, so on anything but a trusted segment either set `ADMIN_PASSWORD` in
@@ -251,13 +254,20 @@ no board changes, no history lost.
 Every poll cycle, everything marked **Export** is written atomically to one
 file (default `/data/snmp-status.json`). Interfaces go to `interfaces[]`;
 every other exported sensor - CPU, memory, disk, temperature, fan, power,
-utilization, plus per-device uptime (Edit dialog) - goes to `metrics[]` as a
-code plus a short pre-formatted `display` string, so a consumer like
-PingCanvas can stay a dumb "code -> text" swapper:
+utilization, amps/volts meters, status flags, plus per-device uptime (Edit
+dialog) - goes to `metrics[]` as a code plus a short pre-formatted
+`display` string, so a consumer like PingCanvas can stay a dumb
+"code -> text" swapper. A `devices[]` roster lists every device
+contributing anything to the feed, with its up/down status. Two siblings
+consume the file today: PingCanvas overlays the values onto boards, and
+[AlertCanvas](https://github.com/RootSwitch/AlertCanvas) holds them
+against thresholds and sends raise/clear notifications (it runs on port
+9162, next door to this app's 9161):
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "devices": [ { "name": "compute-01", "host": "10.0.0.7", "status": "up" } ],
   "interfaces": [ ... ],
   "metrics": [
     { "code": "H4TN", "kind": "cpu", "host": "compute-01",
@@ -463,6 +473,6 @@ sister project.
 ## License
 
 [The Unlicense](LICENSE) - public domain, same as CrossCanvas, PingCanvas,
-and SyslogCanvas. Use it, fork it, ship it at work, no attribution required.
+SyslogCanvas, and AlertCanvas. Use it, fork it, ship it at work, no attribution required.
 (Dependencies keep their own MIT licenses in `node_modules/` when you
 install or ship an image.)
