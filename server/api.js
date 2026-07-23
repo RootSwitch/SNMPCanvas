@@ -276,6 +276,11 @@ const routes = [
         if (!d) return notFound(res);
         const name = body.name !== undefined ? String(body.name).trim() : d.name;
         if (!name) return bad(res, 'Name cannot be empty.');
+        const host = body.host !== undefined ? String(body.host).trim() : d.host;
+        if (!host) return bad(res, 'Host cannot be empty.');
+        const port = body.port !== undefined
+            ? Math.min(65535, Math.max(1, parseInt(body.port, 10) || 161))
+            : d.port;
         const interval = body.pollIntervalS !== undefined
             ? intervalFromBody(body.pollIntervalS)
             : d.poll_interval_s;
@@ -283,12 +288,13 @@ const routes = [
         const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : d.enabled;
         const notes = body.notes !== undefined ? String(body.notes).slice(0, 2000) : d.notes;
         const exportUptime = body.exportUptime !== undefined ? (body.exportUptime ? 1 : 0) : d.export_uptime;
-        db.prepare('UPDATE devices SET name = ?, poll_interval_s = ?, enabled = ?, notes = ?, export_uptime = ? WHERE id = ?')
-            .run(name, interval, enabled, notes, exportUptime, d.id);
+        db.prepare('UPDATE devices SET name = ?, host = ?, port = ?, poll_interval_s = ?, enabled = ?, notes = ?, export_uptime = ? WHERE id = ?')
+            .run(name, host, port, interval, enabled, notes, exportUptime, d.id);
         if (body.credentials && typeof body.credentials === 'object') {
             saveCredentials(d.id, credsFromBody({ version: d.snmp_version, ...body.credentials }));
         }
-        poller.deviceChanged(d.id, enabled && !d.enabled);
+        const addressChanged = host !== d.host || port !== d.port;
+        poller.deviceChanged(d.id, (enabled && !d.enabled) || (enabled && addressChanged));
         exporter.scheduleWrite();
         ok(res);
     } },

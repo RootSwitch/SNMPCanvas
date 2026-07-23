@@ -823,6 +823,9 @@
         <h2>Edit ${esc(d.name)}</h2>
         <div class="form-grid">
             <label>Name</label><input type="text" id="e-name" value="${esc(d.name)}">
+            <label>Address</label>
+            <span><input type="text" id="e-host" value="${esc(d.host)}" style="width:180px">
+                : <input type="number" id="e-port" min="1" max="65535" style="width:80px" value="${d.port}"></span>
             <label>Polling interval</label>
             <span><input type="number" id="e-interval" min="30" style="width:110px" value="${d.pollIntervalS || ''}" placeholder="global"> seconds (blank = global ${d.effectiveIntervalS}s)</span>
             <label>Polling</label>
@@ -862,6 +865,8 @@
             try {
                 const patch = {
                     name: document.getElementById('e-name').value,
+                    host: document.getElementById('e-host').value,
+                    port: document.getElementById('e-port').value,
                     pollIntervalS: document.getElementById('e-interval').value || null,
                     enabled: document.getElementById('e-enabled').checked,
                     exportUptime: document.getElementById('e-uptime').checked,

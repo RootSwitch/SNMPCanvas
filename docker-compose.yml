@@ -25,6 +25,14 @@ services:
       # The :z suffix labels the mount for SELinux hosts (RHEL/Rocky/Fedora);
       # it's a no-op elsewhere.
       - ./data:/data:z
+    # Make the DOCKER HOST reachable from inside the container by name -
+    # for when the box running the containers is itself a monitored device
+    # (its own snmpd). Add it with host "host.docker.internal" instead of a
+    # bridge IP that can change. Note the polls arrive FROM the docker bridge
+    # subnet (172.x), so an agent restricted by source network (snmpd
+    # agentaddress/com2sec, firewalld) must also allow 172.16.0.0/12.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # Timezone governs the nightly prune schedule and log timestamps
       - TZ=Etc/UTC
