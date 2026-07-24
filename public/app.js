@@ -340,7 +340,11 @@
         default sensor selection - open any device afterward to fine-tune what is tracked.</p>
         <form id="bulk-form">
         <div class="form-grid">
-            <label>Addresses</label><textarea id="f-hosts" rows="6" placeholder="192.0.2.10&#10;switch-a.lan&#10;192.0.2.20" required></textarea>
+            <label>Addresses</label>
+            <span><textarea id="f-hosts" rows="6" style="width:100%" placeholder="192.0.2.10&#10;switch-a.lan&#10;192.0.2.20" required></textarea>
+                <input type="file" id="f-hostfile" accept=".xcanvas,.netdraw,.csv,.txt,application/json,text/csv" style="display:none">
+                <button type="button" id="f-fromfile" title="Pull addresses out of a CrossCanvas board (.xcanvas) or a CSV with an IP-Address column - e.g. the board a setup-script --scan seeded">From file…</button>
+                <span class="muted small" id="f-fromfile-msg"></span></span>
             <label>Port</label><input type="number" id="f-port" value="161" min="1" max="65535">
             ${credFieldsHtml()}
         </div>
@@ -356,6 +360,50 @@
         wireCredToggle();
         document.getElementById('back-btn').addEventListener('click', addDeviceWizard);
         document.getElementById('close-btn').addEventListener('click', () => { $modal.close(); route(); });
+
+        // "From file": extract addresses from a CrossCanvas board or a CSV, so
+        // a --scan-seeded board feeds bulk add without a spreadsheet detour.
+        // Order of preference: board devices' IP-Address fields; a CSV column
+        // whose header says IP; else any IPv4-shaped tokens in the text.
+        const extractAddresses = (name, text) => {
+            const out = [];
+            const seen = new Set();
+            const push = (v) => { v = String(v || '').trim(); if (v && !seen.has(v)) { seen.add(v); out.push(v); } };
+            try {
+                const doc = JSON.parse(text);
+                (doc.devices || []).forEach((d) => push(d.fields && d.fields['IP-Address']));
+                if (out.length) return out;
+            } catch (_) { /* not JSON - fall through to CSV/text */ }
+            const lines = text.split(/\r?\n/);
+            const header = (lines[0] || '').split(',').map((h) => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+            const ipCol = header.findIndex((h) => h === 'ip-address' || h === 'ip address' || h === 'ip' || h === 'ipv4 address' || h === 'ipv4');
+            if (ipCol >= 0) {
+                lines.slice(1).forEach((l) => push((l.split(',')[ipCol] || '').trim().replace(/^["']|["']$/g, '')));
+                if (out.length) return out;
+            }
+            const IPV4 = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+            (text.match(IPV4) || []).forEach(push);
+            return out;
+        };
+        const hostFile = document.getElementById('f-hostfile');
+        document.getElementById('f-fromfile').addEventListener('click', () => hostFile.click());
+        hostFile.addEventListener('change', () => {
+            const f = hostFile.files[0];
+            if (!f) return;
+            const fmsg = document.getElementById('f-fromfile-msg');
+            const reader = new FileReader();
+            reader.onload = () => {
+                const found = extractAddresses(f.name, String(reader.result || ''));
+                if (!found.length) { fmsg.textContent = `no addresses found in ${f.name}`; return; }
+                const box = document.getElementById('f-hosts');
+                const have = new Set(box.value.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean));
+                const fresh = found.filter((a) => !have.has(a));
+                box.value = [...have, ...fresh].join('\n');
+                fmsg.textContent = `${fresh.length} address${fresh.length === 1 ? '' : 'es'} from ${f.name}${found.length > fresh.length ? ` (${found.length - fresh.length} already listed)` : ''}`;
+                hostFile.value = '';
+            };
+            reader.readAsText(f);
+        });
 
         document.getElementById('bulk-form').addEventListener('submit', async (ev) => {
             ev.preventDefault();
