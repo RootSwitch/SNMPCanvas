@@ -1179,6 +1179,11 @@
                 <label>History retention</label>
                 <span><input type="number" id="s-retention" value="${s.retentionDays}" min="1" style="width:110px"> days (pruned nightly at 03:30)</span>
             </div>
+            ${s.poller && s.poller.behind ? `<div class="warn-text small" style="margin-top:10px">
+                The poll loop is behind: ${s.poller.overdueDevices} device${s.poller.overdueDevices === 1 ? '' : 's'}
+                ${s.poller.overdueDevices === 1 ? 'has' : 'have'} missed a full interval, worst is
+                ${s.poller.worstLateS}s overdue. History is being recorded at a longer interval than the one set here.
+                Raise POLL_CONCURRENCY (currently ${s.poller.concurrency}), lengthen the interval, or split the fleet.</div>` : ''}
         </div>
         <div class="panel">
             <h2>Interface export</h2>

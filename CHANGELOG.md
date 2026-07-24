@@ -2,6 +2,21 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Poll scheduler: freed slots refill immediately.** Polls were only ever
+  started on the 5-second tick, which capped the loop at `POLL_CONCURRENCY`
+  starts per tick - 48 polls/minute on defaults, however fast devices
+  answered. Past roughly 24 devices at a 30s interval the loop could not keep
+  up and silently stretched the effective interval rather than reporting it:
+  samples kept flowing and graphs kept drawing, just coarser than configured.
+  Measured on a synthetic 100-device fleet at the unchanged default
+  concurrency of 4: **576 samples/min before, 2160 after** (full rate), with
+  p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
+  than ~24 devices were affected; no configuration change is needed to pick
+  up the fix.
+- **The poll loop now says when it is behind.** A saturated loop warns in the
+  log (at most every 10 minutes, naming the current concurrency) and shows a
+  warning on Settings, instead of quietly recording history at a longer
+  interval than the one configured.
 - **snmp-status.json schema v3**: a top-level `devices[]` roster
   `{ name, host, status }` lists every device with ANY exported value, so
   consumers (AlertCanvas device-down alerting) no longer depend on

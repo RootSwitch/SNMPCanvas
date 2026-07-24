@@ -530,7 +530,8 @@ const routes = [
             exportPath: getSetting('export_path'),
             exportError: exporter.getLastError(),
             dataDir: DATA_DIR,
-            credentialEncryption: !!process.env.SNMPCANVAS_SECRET
+            credentialEncryption: !!process.env.SNMPCANVAS_SECRET,
+            poller: poller.health()
         });
     } },
 
