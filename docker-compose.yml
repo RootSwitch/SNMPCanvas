@@ -12,7 +12,9 @@ services:
     image: snmpcanvas
     container_name: snmpcanvas
     # Default port 9161 ("161" for SNMP) - stays clear of UptimeKuma (3001)
-    # and CrossCanvas/PingCanvas (8080/8443) on a shared docker host.
+    # and the suite's neighbors on a shared host: PingCanvas (serves the
+    # CrossCanvas editor too) 8080/8443, SyslogCanvas 9514, AlertCanvas 9162,
+    # LaunchCanvas 9160.
     ports:
       - "9161:9161"
     volumes:

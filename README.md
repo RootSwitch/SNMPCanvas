@@ -6,7 +6,9 @@
 
 SNMPCanvas polls interface traffic, CPU, memory, storage, temperatures, and
 fans on an interval you choose, keeps a configurable window of history, and
-draws the graphs. It is part of the Canvas family:
+draws the graphs.
+
+It is part of the Canvas family:
 [**CrossCanvas**](https://github.com/RootSwitch/CrossCanvas) draws your
 network, [**PingCanvas**](https://github.com/RootSwitch/PingCanvas) turns
 those diagrams into a live reachability wall, and SNMPCanvas adds the
@@ -103,6 +105,10 @@ bigger, the license makes forking genuinely easy.
 > `/srv/noc-data`, the override file and secrets (SNMPCANVAS_SECRET,
 > SUITE_SECRET) are already written, and the app is running. Just set the
 > admin password on first visit.
+> **On Windows?** Skip the `chown` steps (Docker Desktop handles ownership);
+> set env vars PowerShell-style (`$env:NAME = 'value'; npm start`); and
+> `tools/gen-cert.sh` needs Git Bash or WSL - or drop your own PEM pair at
+> the cert paths.
 
 ```yaml
 # docker-compose.yml
@@ -124,8 +130,8 @@ docker compose up -d
 Open `http://host:9161`, set the admin password on the first-run page, and
 add a device. That's the whole install. (The default port is a nod to SNMP's
 UDP/161, picked to coexist quietly with common home-lab neighbors like
-Uptime Kuma on 3001, CrossCanvas/PingCanvas on 8080/8443, and AlertCanvas
-next door on 9162.)
+Uptime Kuma on 3001 and the rest of the suite:
+PingCanvas (which also serves the CrossCanvas editor) on 8080/8443, SNMPCanvas on 9161, SyslogCanvas on 9514 web + 514/162 udp, AlertCanvas on 9162, and LaunchCanvas on 9160.)
 
 Two first-run notes: the setup page belongs to whoever reaches the port
 first, so on anything but a trusted segment either set `ADMIN_PASSWORD` in

@@ -13,7 +13,8 @@ const api = require('./api');
 const poller = require('./poller');
 
 // Default port 9161 ("161" for SNMP) - deliberately clear of the usual
-// home-lab suspects (UptimeKuma 3001, CrossCanvas/PingCanvas 8080/8443).
+// home-lab suspects (UptimeKuma 3001; suite: PingCanvas 8080/8443,
+// SyslogCanvas 9514, AlertCanvas 9162, LaunchCanvas 9160).
 const PORT = parseInt(process.env.PORT || '9161', 10);
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
