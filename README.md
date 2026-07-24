@@ -20,6 +20,8 @@ syslog and SNMP traps from the same gear, and
 suite's front door - one login for every app, a tile launcher, and the
 suite's quickstart docs.
 
+**Install the whole suite in one command:** the [canvas-suite](https://github.com/RootSwitch/canvas-suite) repo is the family's landing page, with one-shot install scripts for the full six-app stack or a Pi-class PingCanvas + AlertCanvas pair.
+
 Unlike CrossCanvas and PingCanvas, SNMPCanvas has a backend: polling needs
 a process that outlives a browser tab, and history needs somewhere to live. The family's
 small-footprint ethos carries over all the same - one container, one SQLite
