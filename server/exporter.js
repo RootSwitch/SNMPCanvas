@@ -1,5 +1,5 @@
 'use strict';
-// snmp-status.json writer (schema v2): every poll cycle, exported interfaces
+// snmp-status.json writer (schema v3): every poll cycle, exported interfaces
 // go to interfaces[] (link color + bandwidth pills in PingCanvas) and every
 // other exported sensor goes to metrics[] as { code, kind, host, display }.
 // SNMPCanvas owns the display formatting; the kiosk is a code -> display
@@ -137,7 +137,7 @@ function write() {
         };
     });
 
-    // --- metrics[] (schema v2): every exported non-interface sensor ---
+    // --- metrics[] (schema v3): every exported non-interface sensor ---
     const metricRows = db.prepare(`
         SELECT e.id, e.kind, e.name, e.code, e.extra, d.name AS device_name, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id

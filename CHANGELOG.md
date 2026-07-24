@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased (since 1.0.0)
+
+- **snmp-status.json schema v3**: a top-level `devices[]` roster
+  `{ name, host, status }` lists every device with ANY exported value, so
+  consumers (AlertCanvas device-down alerting) no longer depend on
+  interface-embedded device blocks. `pollIntervalSec` rides at the top
+  level for staleness math. `state`-kind metrics (binary alarms, e.g. UPS
+  on-battery) carry a `status` field like cpu/battery do.
+- **Device re-IP**: Edit accepts host/port in place - entity ids and codes
+  survive, so boards and alerting keep working across an address change.
+- **Bulk add "From file"**: pull addresses out of a CrossCanvas board
+  (.xcanvas) or a CSV with an IP column.
+- Suite integration: LaunchCanvas SSO token accept (opt-in via
+  SUITE_SECRET), disabled devices leave the export, credential-edit UI.
+
 ## 1.0.0 - 2026-07-18
 
 First public release.

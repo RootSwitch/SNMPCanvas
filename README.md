@@ -60,6 +60,12 @@ written to a small JSON status file every cycle, for other tools to read.
   verifies with a GET, walks the standard tables, and shows you everything
   it found so you choose what gets tracked. No MIB files involved -
   everything is well-known numeric OIDs (see `server/oids.js`).
+- **Bulk add** - paste a list of addresses (one set of credentials), and
+  each is probed and added with its default sensor selection - the fast way
+  to onboard a whole fleet. **From file** pulls the addresses out of a
+  CrossCanvas board (`.xcanvas`) or a CSV with an IP column - e.g. the
+  board a setup-script `--scan` seeded - so a drawn network becomes a
+  polled one without a spreadsheet detour.
 - **SNMPv2c and v3** - v3 auth MD5/SHA-1/SHA-256/SHA-512, privacy
   DES/AES-128 and both AES-256 key-localization variants (Blumenthal and
   Reeder/Cisco - devices vary, and the wizard offers both).
@@ -76,8 +82,8 @@ written to a small JSON status file every cycle, for other tools to read.
   [CrossCanvas](https://github.com/RootSwitch/CrossCanvas) imports directly
   (File -> Import inventory), so devices SNMPCanvas already discovered can seed
   a diagram - and a device with an IP is monitoring-ready in PingCanvas at once.
-- **29 themes** carried over from CrossCanvas's palette family, grouped the
-  same way (Paper / Warm / Cool / Night / Screen).
+- **30 themes** - Classic plus 29 shared with CrossCanvas's palette family,
+  grouped the same way (Paper / Warm / Cool / Night / Screen).
 
 ## Small on purpose
 
@@ -91,6 +97,12 @@ moving parts few is a design choice - and if you want it to become something
 bigger, the license makes forking genuinely easy.
 
 ## Quick start (Docker)
+
+> **Installed via the [canvas-suite](https://github.com/RootSwitch/canvas-suite)
+> script?** Skip this section - your data already lives under
+> `/srv/noc-data`, the override file and secrets (SNMPCANVAS_SECRET,
+> SUITE_SECRET) are already written, and the app is running. Just set the
+> admin password on first visit.
 
 ```yaml
 # docker-compose.yml
@@ -157,7 +169,7 @@ your edits:
 services:
   snmpcanvas:
     volumes:
-      - /projects/noc-data:/data:z   # replaces ./data (same container path)
+      - /srv/noc-data:/data:z        # replaces ./data (same container path)
     environment:
       - TZ=America/Chicago
 ```
@@ -185,7 +197,8 @@ Node 20+: `npm install && npm start` (listens on `:9161`, data in `./data`).
 |---|---|---|
 | `PORT` | `9161` | HTTP/HTTPS listen port |
 | `SNMPCANVAS_DATA` | `/data` | Directory for the SQLite db, certs, and default export file |
-| `TLS_CERT` / `TLS_KEY` | `$DATA/certs/server.crt|key` | PEM cert/key pair; HTTPS turns on when both exist |
+| `TLS_CERT` / `TLS_KEY` | `$DATA/certs/server.crt` / `.key` | PEM cert/key pair; HTTPS turns on when both exist |
+| `TRUST_PROXY` | - | `1` = honor `X-Forwarded-For` for the login limiter (behind a reverse proxy) |
 | `ADMIN_PASSWORD` | - | Pre-set the UI password (otherwise first-run setup page) |
 | `SNMPCANVAS_SECRET` | - | If set, SNMP credentials are AES-256-GCM encrypted at rest |
 | `SUITE_SECRET` | - | Opt-in suite single sign-on: accept signed login tokens from the [LaunchCanvas](https://github.com/RootSwitch/LaunchCanvas) portal (same value across the suite; see its README for the security model) |
@@ -310,7 +323,7 @@ The v1 `interfaces[]` shape is unchanged:
 ```json
 {
   "schemaVersion": 1,
-  "generator": "snmpcanvas/0.1.0",
+  "generator": "snmpcanvas/1.0.0",
   "generatedAt": "2026-07-16T14:05:03Z",
   "interfaces": [
     {
@@ -463,7 +476,7 @@ self-contained fixes are welcome as pull requests too.
 
 For larger features - alerting, discovery, rollups, and the like - I'd
 rather you fork than open a big PR. SNMPCanvas is deliberately small, the
-whole backend is nine readable files, and The Unlicense means you owe nobody
+whole backend is a handful of readable files, and The Unlicense means you owe nobody
 anything. Build the monitor you want.
 
 ## Credits
