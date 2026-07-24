@@ -156,7 +156,7 @@ const routes = [
         // admin account. A portal-authenticated user still may, to set a local
         // fallback password.
         if (auth.ssoEnabled() && !auth.authenticate(req))
-            return json(res, 403, { error: 'This app is part of a single sign-on suite - sign in through LaunchCanvas first.' });
+            return json(res, 403, { error: 'This app is part of a single sign-on suite - sign in through LaunchCanvas first. (No portal on this box? Set ADMIN_PASSWORD in the compose file for this app and restart, or remove SUITE_SECRET to restore the normal first-run setup.)' });
         if (!body.password || String(body.password).length < 8) return bad(res, 'Password must be at least 8 characters.');
         auth.setPassword(String(body.password));
         const token = auth.createSession();
@@ -179,7 +179,10 @@ const routes = [
 
     { method: 'POST', path: /^\/api\/logout$/, authRequired: false, handler: (req, res) => {
         auth.destroySession(auth.tokenFromRequest(req));
-        res.setHeader('Set-Cookie', auth.clearCookie());
+        // Drop the suite token as well, or this button is a no-op under SSO:
+        // the local session dies, the shared cookie survives, and the next
+        // request signs straight back in while the page redraws as logged in.
+        res.setHeader('Set-Cookie', [auth.clearCookie(), auth.clearSuiteCookie()]);
         ok(res);
     } },
 
@@ -285,9 +288,19 @@ const routes = [
         if (!name) return bad(res, 'Name cannot be empty.');
         const host = body.host !== undefined ? String(body.host).trim() : d.host;
         if (!host) return bad(res, 'Host cannot be empty.');
-        const port = body.port !== undefined
-            ? Math.min(65535, Math.max(1, parseInt(body.port, 10) || 161))
-            : d.port;
+        // A supplied port has to be a real port. Clamping-with-a-fallback sent
+        // a cleared field to 161, quietly moving the device off the port it
+        // actually answers on, and the only symptom was a generic SNMP
+        // timeout. Name and host already refuse to be blanked; so does this.
+        // An absent key still means "leave it alone".
+        let port = d.port;
+        if (body.port !== undefined) {
+            const raw = String(body.port).trim();
+            if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 65535) {
+                return bad(res, 'Port must be a whole number from 1 to 65535.');
+            }
+            port = Number(raw);
+        }
         const interval = body.pollIntervalS !== undefined
             ? intervalFromBody(body.pollIntervalS)
             : d.poll_interval_s;
@@ -310,12 +323,22 @@ const routes = [
         if (host !== d.host && !credsGiven) {
             return bad(res, 'Changing the address means re-entering this device\'s SNMP credentials - the stored ones are not sent to a new host.');
         }
+        const addressChanged = host !== d.host || port !== d.port;
+        // Two devices pointed at one address poll the box twice and export it
+        // twice, so a single outage reaches PingCanvas and AlertCanvas as two
+        // device-down alarms for the same host. Bulk add already skips
+        // addresses it monitors; editing was the way around that. Exact
+        // host:port only - no DNS, no aliases, nothing clever.
+        if (addressChanged) {
+            const clash = db.prepare('SELECT name FROM devices WHERE id != ? AND enabled = 1 AND host = ? AND port = ?')
+                .get(d.id, host, port);
+            if (clash) return bad(res, `${host}:${port} is already monitored as "${clash.name}".`);
+        }
         db.prepare('UPDATE devices SET name = ?, host = ?, port = ?, poll_interval_s = ?, enabled = ?, notes = ?, export_uptime = ? WHERE id = ?')
             .run(name, host, port, interval, enabled, notes, exportUptime, d.id);
         if (body.credentials && typeof body.credentials === 'object') {
             saveCredentials(d.id, credsFromBody({ version: d.snmp_version, ...body.credentials }));
         }
-        const addressChanged = host !== d.host || port !== d.port;
         if (addressChanged) {
             // Whatever answers at the new address may be a different box, whose
             // counters have nothing to do with the ones we last stored. Rating
@@ -533,7 +556,16 @@ const routes = [
     } },
 
     { method: 'POST', path: /^\/api\/settings\/password$/, handler: (req, res, p, body) => {
-        if (!auth.checkPassword(String(body.current || ''))) return json(res, 401, { error: 'Current password is wrong.' });
+        // Under SSO an app can be running with no local password at all, and the
+        // docs (and its own login page) tell the operator to set a fallback one
+        // from here. That was impossible: checkPassword is false whenever nothing
+        // is stored, so the form answered "Current password is wrong" about a
+        // password that never existed. With none to confirm, reaching this route
+        // already required a valid portal session - the same proof of authority
+        // the confirmation was standing in for.
+        if (auth.passwordIsSet() && !auth.checkPassword(String(body.current || ''))) {
+            return json(res, 401, { error: 'Current password is wrong.' });
+        }
         if (!body.next || String(body.next).length < 8) return bad(res, 'New password must be at least 8 characters.');
         auth.setPassword(String(body.next));
         auth.destroyOtherSessions(auth.tokenFromRequest(req));   // evict any stolen cookie

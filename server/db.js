@@ -11,7 +11,15 @@ const Database = require('better-sqlite3');
 const DATA_DIR = process.env.SNMPCANVAS_DATA || path.join(__dirname, '..', 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'snmpcanvas.db'));
+const DB_FILE = path.join(DATA_DIR, 'snmpcanvas.db');
+const db = new Database(DB_FILE);
+// Owner-only. This file holds the devices it polls and their credentials, and it sits in a directory the suite
+// deliberately leaves world-readable (the kiosk's web tier runs as a different
+// uid and serves boards out of it), so the directory cannot protect it.
+// Narrowed here rather than with a process-wide umask, which would also
+// restrict the export files that web tier has to read. SQLite copies this mode
+// onto the -wal and -shm files it creates alongside.
+try { fs.chmodSync(DB_FILE, 0o600); } catch (_) { /* best effort - some mounts refuse chmod */ }
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
 db.pragma('foreign_keys = ON');
