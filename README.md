@@ -103,8 +103,10 @@ bigger, the license makes forking genuinely easy.
 > **Installed via the [canvas-suite](https://github.com/RootSwitch/canvas-suite)
 > script?** Skip this section - your data already lives under
 > `/srv/noc-data`, the override file and secrets (SNMPCANVAS_SECRET,
-> SUITE_SECRET) are already written, and the app is running. Just set the
-> admin password on first visit.
+> SUITE_SECRET) are already written, and the app is running. Sign in through LaunchCanvas
+> (the setup script prints its admin password once, and stores it in
+> `/projects/launchcanvas/docker-compose.override.yml`); this app has no
+> login of its own until you set an optional fallback password in Settings.
 > **On Windows?** Skip the `chown` steps (Docker Desktop handles ownership);
 > set env vars PowerShell-style (`$env:NAME = 'value'; npm start`); and
 > `tools/gen-cert.sh` needs Git Bash or WSL - or drop your own PEM pair at
