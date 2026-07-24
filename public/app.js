@@ -365,20 +365,46 @@
         // a --scan-seeded board feeds bulk add without a spreadsheet detour.
         // Order of preference: board devices' IP-Address fields; a CSV column
         // whose header says IP; else any IPv4-shaped tokens in the text.
+        // Quote-aware CSV field split - a naive split(',') shears a quoted
+        // label like "Switch, Core" into two fields and shifts every column
+        // after it, so the "IP" column yields fragments of the label instead.
+        const splitCsvLine = (line) => {
+            const fields = [];
+            let cur = '', inQ = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (inQ) {
+                    if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+                    else cur += ch;
+                } else if (ch === '"') inQ = true;
+                else if (ch === ',') { fields.push(cur); cur = ''; }
+                else cur += ch;
+            }
+            fields.push(cur);
+            return fields.map((f) => f.trim());
+        };
+        // Plausible probe target: an IPv4/IPv6/hostname-shaped token. Filters
+        // the placeholder junk real exports carry ("N/A", "-", notes with
+        // spaces) before it becomes a doomed SNMP probe in the results table.
+        const plausibleAddress = (v) =>
+            v.length <= 253 && /^[A-Za-z0-9]([A-Za-z0-9.:_-]*[A-Za-z0-9])?$/.test(v) && /[.:]/.test(v);
         const extractAddresses = (name, text) => {
             const out = [];
             const seen = new Set();
-            const push = (v) => { v = String(v || '').trim(); if (v && !seen.has(v)) { seen.add(v); out.push(v); } };
+            const push = (v) => {
+                v = String(v || '').trim();
+                if (v && plausibleAddress(v) && !seen.has(v)) { seen.add(v); out.push(v); }
+            };
             try {
                 const doc = JSON.parse(text);
                 (doc.devices || []).forEach((d) => push(d.fields && d.fields['IP-Address']));
                 if (out.length) return out;
             } catch (_) { /* not JSON - fall through to CSV/text */ }
             const lines = text.split(/\r?\n/);
-            const header = (lines[0] || '').split(',').map((h) => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+            const header = splitCsvLine(lines[0] || '').map((h) => h.replace(/^["']|["']$/g, '').toLowerCase());
             const ipCol = header.findIndex((h) => h === 'ip-address' || h === 'ip address' || h === 'ip' || h === 'ipv4 address' || h === 'ipv4');
             if (ipCol >= 0) {
-                lines.slice(1).forEach((l) => push((l.split(',')[ipCol] || '').trim().replace(/^["']|["']$/g, '')));
+                lines.slice(1).forEach((l) => push(splitCsvLine(l)[ipCol]));
                 if (out.length) return out;
             }
             const IPV4 = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
