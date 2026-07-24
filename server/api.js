@@ -316,6 +316,17 @@ const routes = [
             saveCredentials(d.id, credsFromBody({ version: d.snmp_version, ...body.credentials }));
         }
         const addressChanged = host !== d.host || port !== d.port;
+        if (addressChanged) {
+            // Whatever answers at the new address may be a different box, whose
+            // counters have nothing to do with the ones we last stored. Rating
+            // the difference produces an enormous fake spike - and errors and
+            // discards have no sanity clamp, so it lands in the export, pages
+            // whoever is watching, and leaves a permanent scar on the history
+            // graph. Drop the baselines (the poller's own idiom for "start
+            // fresh") and lose one interval of rates instead.
+            db.prepare('UPDATE entities SET poll_state = NULL WHERE device_id = ?').run(d.id);
+            db.prepare('UPDATE devices SET last_sysuptime_cs = NULL WHERE id = ?').run(d.id);
+        }
         poller.deviceChanged(d.id, (enabled && !d.enabled) || (enabled && addressChanged));
         exporter.scheduleWrite();
         ok(res);

@@ -397,10 +397,20 @@
             return fields.map((f) => f.trim());
         };
         // Plausible probe target: an IPv4/IPv6/hostname-shaped token. Filters
-        // the placeholder junk real exports carry ("N/A", "-", notes with
-        // spaces) before it becomes a doomed SNMP probe in the results table.
-        const plausibleAddress = (v) =>
-            v.length <= 253 && /^[A-Za-z0-9]([A-Za-z0-9.:_-]*[A-Za-z0-9])?$/.test(v) && /[.:]/.test(v);
+        // the placeholder junk real exports carry before it becomes a doomed
+        // probe in the results table - but nothing more. Requiring a dot or
+        // colon here (the first cut at this) threw away valid short names like
+        // "core-sw" that the textarea beside it accepts by hand, and several
+        // IPv6 forms besides. Only known placeholders are refused now; a
+        // wrong-but-host-shaped entry is visible and skippable in the results.
+        const ADDRESS_JUNK = new Set(['n/a', 'na', 'none', 'null', 'nil', 'unknown',
+            'tbd', 'dhcp', 'unassigned', '-', '--']);
+        const plausibleAddress = (v) => {
+            if (!v || v.length > 253 || ADDRESS_JUNK.has(v.toLowerCase())) return false;
+            return v.includes(':')
+                ? /^[0-9A-Fa-f:.]+(%[A-Za-z0-9_-]+)?$/.test(v)          // IPv6, optionally zoned
+                : /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9.])?$/.test(v); // IPv4 / host / FQDN
+        };
         const extractAddresses = (name, text) => {
             const out = [];
             const seen = new Set();
