@@ -927,7 +927,9 @@
             <summary>Change credentials (${esc(d.snmpVersion)})</summary>
             <div class="section-note">Leave blank to keep the stored credentials. Enter new ones to rotate
                 them - e.g. changing a community off <code>public</code> - which also encrypts them at rest
-                when SNMPCANVAS_SECRET is set. The interface codes are unchanged, so any board keeps working.</div>
+                when SNMPCANVAS_SECRET is set. The interface codes are unchanged, so any board keeps working.
+                <strong>Changing the Address requires re-entering them</strong> - stored credentials are never
+                sent to a new host.</div>
             <div class="form-grid">${credFieldsHtml()}</div>
         </details>
         <div class="form-actions">
@@ -947,6 +949,11 @@
         document.getElementById('f-community').placeholder = 'unchanged';
         wireCredToggle();
         document.getElementById('f-version').dispatchEvent(new Event('change'));
+        // Typing a new address opens the credentials section: the server refuses
+        // a host change without them, so surface that before the Save, not after.
+        document.getElementById('e-host').addEventListener('input', (ev) => {
+            if (ev.target.value.trim() !== d.host) $modal.querySelector('.cred-edit').open = true;
+        });
         document.getElementById('e-cancel').addEventListener('click', () => $modal.close());
         document.getElementById('e-save').addEventListener('click', async () => {
             try {

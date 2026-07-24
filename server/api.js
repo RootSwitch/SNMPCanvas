@@ -295,6 +295,21 @@ const routes = [
         const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : d.enabled;
         const notes = body.notes !== undefined ? String(body.notes).slice(0, 2000) : d.notes;
         const exportUptime = body.exportUptime !== undefined ? (body.exportUptime ? 1 : 0) : d.export_uptime;
+        // Stored credentials are bound to the host they were entered for. The
+        // next poll (or Rediscover) sends them to whatever now answers at this
+        // address, so silently carrying them to a NEW host would let anyone who
+        // can reach this API read out a community string or v3 key by pointing
+        // a device at a listener they control - credentials the API never
+        // returns and the database encrypts at rest. Re-point and re-enter
+        // together, or not at all. A port-only change stays on the same host,
+        // so it does not require this.
+        const credsGiven = !!body.credentials && typeof body.credentials === 'object' &&
+            (d.snmp_version === '2c'
+                ? String(body.credentials.community || '').trim() !== ''
+                : String(body.credentials.v3_user || '').trim() !== '');
+        if (host !== d.host && !credsGiven) {
+            return bad(res, 'Changing the address means re-entering this device\'s SNMP credentials - the stored ones are not sent to a new host.');
+        }
         db.prepare('UPDATE devices SET name = ?, host = ?, port = ?, poll_interval_s = ?, enabled = ?, notes = ?, export_uptime = ? WHERE id = ?')
             .run(name, host, port, interval, enabled, notes, exportUptime, d.id);
         if (body.credentials && typeof body.credentials === 'object') {
