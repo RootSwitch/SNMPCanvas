@@ -584,6 +584,27 @@ account on the monitored host - SNMPCanvas only ever reads the published
 number. (NVIDIA note: `fan.speed` reports percent, not RPM - name it
 `util-GPU-Fan`, not `fan-`.)
 
+**Keep the command fast - cache anything that reaches off the box.** The agent
+runs it on *every poll*, and the reply cannot leave until it returns. A script
+that curls an inverter's API or walks a Modbus register for 400ms turns that
+host into a 400ms device, and one poll slot is held for the whole of it. That
+is the same arithmetic as an unreachable device, just smaller: capacity is
+slot-seconds, so response time multiplies straight into it.
+
+Decouple the fetch from the read. A cron job or systemd timer writes the value
+to a file, and `extend` only reads it:
+
+```
+* * * * *  /usr/local/bin/read-inverter.sh > /run/solar.txt
+```
+```
+extend power-Solar  /bin/cat /run/solar.txt
+```
+
+The poll stays sub-millisecond and the data is as fresh as the timer. Local
+commands that already return instantly - `upsc`, `nvidia-smi`, reading
+`/sys` - need none of this.
+
 A USB UPS via [NUT](https://networkupstools.org/) is the canonical battery
 example - `upsc` already prints bare numbers:
 
