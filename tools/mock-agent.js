@@ -4,12 +4,29 @@
 //
 //   node tools/mock-agent.js            # v2c community "public", v3 user "labuser"
 //   MOCK_PORT=16100 node tools/mock-agent.js
+//   MOCK_EVIL=1 node tools/mock-agent.js  # hostile strings, see below
 //
 // Simulates a Linux-ish box: system group, 4 interfaces (ifTable + ifXTable
 // with 64-bit counters), 2 CPU cores (hrProcessorLoad), RAM + one filesystem
 // (hrStorageTable). Counters move with pseudo-random traffic every 5 seconds.
+//
+// MOCK_EVIL=1 replaces the strings a DEVICE controls - sysName, ifName, ifAlias
+// - with markup, quote-breakouts and a spreadsheet formula. Everything a device
+// tells us is untrusted input that ends up in HTML, in the exported JSON and in
+// CSV, and none of it is anything an operator typed. Point SNMPCanvas at this
+// agent and the UI must render the payloads as visible TEXT: window.__xss1..3
+// must stay undefined, and the inventory CSV must not begin a cell with a bare
+// '=' . Used for the standing audit recorded in the project notes; run it again
+// after touching anything that renders or exports device strings.
 
 const snmp = require('net-snmp');
+const EVIL = process.env.MOCK_EVIL === '1';
+// A leading '=' makes Excel and LibreOffice execute the cell on open, so it is
+// as much an injection as the markup is - the export guard has to prefix it.
+const evilName = '<img src=x onerror=window.__xss1=1>';
+const evilIfName = '<svg onload=window.__xss2=1>';
+const evilAlias = '"><b onmouseover=window.__xss3=1>alias</b>';
+const evilLocation = "=cmd|' /c calc'!A1";
 
 const PORT = parseInt(process.env.MOCK_PORT || '16100', 10);
 const OT = snmp.ObjectType;
@@ -43,8 +60,8 @@ const scalars = [
     ['sysObjectID', '1.3.6.1.2.1.1.2', OT.OID, '1.3.6.1.4.1.8072.3.2.10'],
     ['sysUpTime', '1.3.6.1.2.1.1.3', OT.TimeTicks, 0],
     ['sysContact', '1.3.6.1.2.1.1.4', OT.OctetString, 'lab@example.net'],
-    ['sysName', '1.3.6.1.2.1.1.5', OT.OctetString, 'mocklab'],
-    ['sysLocation', '1.3.6.1.2.1.1.6', OT.OctetString, 'the basement']
+    ['sysName', '1.3.6.1.2.1.1.5', OT.OctetString, EVIL ? evilName : 'mocklab'],
+    ['sysLocation', '1.3.6.1.2.1.1.6', OT.OctetString, EVIL ? evilLocation : 'the basement']
 ];
 for (const [name, oid, type, value] of scalars) {
     mib.registerProvider({ name, type: snmp.MibProviderType.Scalar, oid, scalarType: type, maxAccess: RO });
@@ -84,7 +101,7 @@ mib.registerProvider({
 
 // name, type, mbps, admin, oper, alias, avg utilization (fraction of speed)
 const IFACES = [
-    { idx: 1, name: 'eth0', descr: 'Intel I226-V', type: 6, mbps: 2500, admin: 1, oper: 1, alias: 'uplink to core-sw', util: 0.11 },
+    { idx: 1, name: EVIL ? evilIfName : 'eth0', descr: 'Intel I226-V', type: 6, mbps: 2500, admin: 1, oper: 1, alias: EVIL ? evilAlias : 'uplink to core-sw', util: 0.11 },
     { idx: 2, name: 'eth1', descr: 'Intel I226-V', type: 6, mbps: 2500, admin: 1, oper: 1, alias: 'lab vlan trunk', util: 0.34 },
     { idx: 3, name: 'eth2', descr: 'Intel I226-V', type: 6, mbps: 1000, admin: 1, oper: 2, alias: '', util: 0 },
     { idx: 4, name: 'lo', descr: 'loopback', type: 24, mbps: 0, admin: 1, oper: 1, alias: '', util: 0 }

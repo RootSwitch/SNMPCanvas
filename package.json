@@ -16,7 +16,10 @@
   "scripts": {
     "start": "node server/server.js",
     "mock-agent": "node tools/mock-agent.js",
-    "check-history": "node tools/check-history.js"
+    "test": "node tools/check-export.js && node tools/check-history.js && node tools/check-concurrency.js",
+    "check-export": "node tools/check-export.js",
+    "check-history": "node tools/check-history.js",
+    "check-concurrency": "node tools/check-concurrency.js"
   },
   "engines": {
     "node": ">=20"

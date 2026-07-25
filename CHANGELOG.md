@@ -2,6 +2,18 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Tests for the things that broke.** `npm test` now runs three checks that
+  live in the repo instead of in somebody's scratch directory:
+  `tools/check-export.js` asserts the snmp-status.json contract PingCanvas and
+  AlertCanvas read (a change here breaks a different repo, silently - a kiosk
+  whose annotations stop binding still draws a perfect board with no numbers on
+  it); `tools/check-history.js` covers bucketing and the rollup;
+  `tools/check-concurrency.js` proves a Settings change reaches the live poll
+  loop and that `POLL_CONCURRENCY` still overrides it. `tools/mock-agent.js`
+  gained `MOCK_EVIL=1`, which serves markup, a quote breakout and a spreadsheet
+  formula as sysName/ifName/ifAlias - a mode on the existing agent rather than a
+  second copy of it, since a divergent copy would stop testing the real thing.
+
 - **Backup download no longer freezes the app.** `/api/backup` copied the
   database with a synchronous `VACUUM INTO`, which better-sqlite3 runs on the
   event loop: measured on a 400MB database that was **3.0 seconds during which
