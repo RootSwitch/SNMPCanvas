@@ -210,12 +210,40 @@ Node 20+: `npm install && npm start` (listens on `:9161`, data in `./data`).
 | `ADMIN_PASSWORD` | - | Pre-set the UI password (otherwise first-run setup page) |
 | `SNMPCANVAS_SECRET` | - | If set, SNMP credentials are AES-256-GCM encrypted at rest |
 | `SUITE_SECRET` | - | Opt-in suite single sign-on: accept signed login tokens from the [LaunchCanvas](https://github.com/RootSwitch/LaunchCanvas) portal (same value across the suite; see its README for the security model) |
-| `POLL_CONCURRENCY` | `4` | Max devices polled simultaneously |
+| `POLL_CONCURRENCY` | `16` | Max devices polled simultaneously. Slots spend their time waiting on UDP, not working, so raising this is cheap; at most half are ever given to devices already down, so unreachable kit cannot starve the rest |
 | `COOKIE_SECURE` | auto | `Secure` cookies: on with HTTPS, off with HTTP; set to override |
 | `TZ` | UTC | Timezone for the nightly prune and log timestamps |
 
 Polling interval, retention days, and the export path are set in the UI
 (Settings) and stored in the database.
+
+## How many devices can one instance handle?
+
+Measured, not estimated - on a **Raspberry Pi 3B+** (4x1.4GHz, 1GB RAM,
+Debian 13) polling a synthetic fleet over real network, at the default 30s
+interval with every interface tracked and exported:
+
+| Fleet | Result |
+|---|---|
+| 400 devices, 4800 tracked entities, 40 of them unreachable | Full rate, ~8200 samples/min, **68% of one core**, 113MB RSS |
+
+The loop is single-threaded, so **one core is the ceiling** regardless of how
+many the machine has. A Pi 3B+ is therefore roughly a 400-500 device box at
+30s; anything x86 has enormous headroom (the same fleet costs a desktop Xeon
+about 4% of a core). Disk is rarely the constraint: history runs roughly
+17MB per tracked entity per 90 days.
+
+**Unreachable devices are the thing that actually costs you.** A device that
+answers occupies a slot for ~50ms; one that does not occupies it for a full
+timeout, ~10s - about 200x more. Two things keep that from hurting: at most
+half of `POLL_CONCURRENCY` is ever handed to devices already marked down, so
+they cannot starve the ones that are answering, and the loop refills a freed
+slot immediately rather than waiting for the next scheduling tick. Down
+devices are simply re-checked less often the more of them there are.
+
+If the loop ever cannot keep up it says so - a warning in the log and on the
+Settings page - rather than silently recording history at a longer interval
+than the one configured.
 
 ## Security posture
 

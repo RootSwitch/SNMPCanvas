@@ -43,7 +43,7 @@ services:
       #- ADMIN_PASSWORD=change-me
       # Optional: encrypt stored SNMP credentials at rest with this secret
       #- SNMPCANVAS_SECRET=a-long-random-string
-      #- POLL_CONCURRENCY=4
+      #- POLL_CONCURRENCY=16
     logging: *default-logging
     restart: unless-stopped
 

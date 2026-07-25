@@ -13,13 +13,31 @@ const auth = require('./auth');
 const exporter = require('./exporter');
 
 const TICK_MS = 5000;
-const CONCURRENCY = Math.max(1, parseInt(process.env.POLL_CONCURRENCY || '4', 10) || 4);
+// A slot is not a worker - it is one outstanding UDP request. Slots spend
+// their time WAITING, which is exactly the resource an unreachable device
+// consumes (5s timeout x 1 retry = ~10s of a slot, against ~50ms for a device
+// that answers). A generous cap is close to free: it does not create work, it
+// only stops a backlog forming, so on a healthy fleet it is inert. Measured on
+// a Raspberry Pi 3B+ polling 400 devices with 40 of them dark: 4 could not keep
+// up at all, 16 held a true 30s interval at 80% of a core, 32 self-limited to
+// 24 in flight. 16 is the default because it is the largest value proven safe
+// on the weakest box the suite targets.
+const CONCURRENCY = Math.max(1, parseInt(process.env.POLL_CONCURRENCY || '16', 10) || 16);
+
+// Devices already known down may occupy at most half the slots. Without this,
+// enough dark devices starve every healthy one: each holds a slot for a full
+// timeout, so ~12 of them saturated the old default on their own regardless of
+// how small the rest of the fleet was. Down devices consequently get repolled
+// more slowly the more of them there are, which is the right trade - it is also
+// most of what an explicit per-device backoff would have bought.
+const DOWN_SLOT_MAX = Math.max(1, Math.floor(CONCURRENCY / 2));
 const DEVICE_WALL_CLOCK_MS = 60 * 1000;   // hard cap per device poll
 const DOWN_AFTER_FAILURES = 2;            // one missed poll is not "down"
 const META_REFRESH_EVERY = 12;            // ifName/ifAlias/ifHighSpeed refresh cadence
 const WRAP32 = 2n ** 32n;
 
 const inFlight = new Set();      // device ids
+const downInFlight = new Set();  // subset of inFlight whose device is already down
 const nextDue = new Map();       // device id -> ms epoch
 const pollSeq = new Map();       // device id -> counter (meta refresh cadence)
 let timer = null;
@@ -103,8 +121,7 @@ function reconcile() {
 // Called on every tick AND as each poll finishes, so a slot freed 200ms into a
 // tick is reused at 200ms rather than idling out the remaining 4.8 seconds.
 function pump() {
-    const free = CONCURRENCY - inFlight.size;
-    if (free <= 0) return;
+    if (inFlight.size >= CONCURRENCY) return;
     const now = Date.now();
     const due = [];
     for (const [id, at] of nextDue) {
@@ -113,14 +130,20 @@ function pump() {
     if (!due.length) return;
     due.sort((a, b) => a[1] - b[1]);   // longest-overdue first, so nothing starves
     const byId = db.prepare('SELECT * FROM devices WHERE id = ?');
-    for (const [id] of due.slice(0, free)) {
+    // Walk the WHOLE due list rather than the first `free` of it: a run of down
+    // devices at the head must be skipped past, not allowed to consume the pass.
+    for (const [id] of due) {
+        if (inFlight.size >= CONCURRENCY) break;
         const device = byId.get(id);
         if (!device || !device.enabled) { nextDue.delete(id); continue; }
+        const isDown = device.status === 'down';
+        if (isDown && downInFlight.size >= DOWN_SLOT_MAX) continue;   // keep slots for reachable devices
         inFlight.add(id);
+        if (isDown) downInFlight.add(id);
         scheduleNext(device); // schedule next poll now; overruns skip, never queue twice
         pollDevice(device)
             .catch((err) => log(`device ${device.id} (${device.host}) poll crashed:`, err.message))
-            .finally(() => { inFlight.delete(id); pump(); });
+            .finally(() => { inFlight.delete(id); downInFlight.delete(id); pump(); });
     }
 }
 
@@ -136,7 +159,12 @@ function checkBehind() {
     const globalS = parseInt(getSetting('poll_interval_s'), 10) || 300;
     let overdue = 0;
     let worstLate = 0;
-    for (const r of db.prepare('SELECT id, poll_interval_s FROM devices WHERE enabled = 1').all()) {
+    // Devices already down are EXCLUDED on purpose. DOWN_SLOT_MAX deliberately
+    // deprioritises them, so they run late by design - counting them here would
+    // make this warn on any fleet with a few dark boxes, which is most of them,
+    // and an alarm that is always on is not an alarm. What matters is a device
+    // that is answering fine and still is not being polled on time.
+    for (const r of db.prepare("SELECT id, poll_interval_s FROM devices WHERE enabled = 1 AND status <> 'down'").all()) {
         const at = nextDue.get(r.id);
         if (at === undefined || inFlight.has(r.id)) continue;
         // nextDue is set when a poll STARTS, so anything more than a full
@@ -156,7 +184,7 @@ function checkBehind() {
     if (!isBehind) { lastBehindLog = 0; return; }
     if (now - lastBehindLog < BEHIND_LOG_EVERY_MS) return;
     lastBehindLog = now;
-    log(`WARNING: poll loop is behind - ${overdue} device(s) have missed a full interval, worst is `
+    log(`WARNING: poll loop is behind - ${overdue} reachable device(s) have missed a full interval, worst is `
         + `${behind.worstLateS}s overdue. Effective interval is longer than configured. `
         + `Raise POLL_CONCURRENCY (currently ${CONCURRENCY}), lengthen the poll interval, or split the fleet.`);
 }

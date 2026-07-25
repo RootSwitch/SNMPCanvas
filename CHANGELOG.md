@@ -13,6 +13,19 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **Unreachable devices can no longer starve the ones that answer.** A device
+  that responds holds a poll slot for ~50ms; one that does not holds it for a
+  full timeout, ~10s - roughly 200x more - so about a dozen dark devices
+  saturated the old default on their own, whatever the rest of the fleet was
+  doing. At most half of `POLL_CONCURRENCY` is now given to devices already
+  marked down. Measured on a Pi 3B+ with 400 devices, 40 dark, at the OLD
+  concurrency of 4: **2592 samples/min before, ~7800 after**, with reachable
+  devices back to an 18s median on a 30s interval.
+- **`POLL_CONCURRENCY` default raised from 4 to 16.** A slot is one
+  outstanding UDP request, not a worker - it spends its time waiting, so a
+  larger cap is close to free and simply stops a backlog forming. Verified on
+  a Pi 3B+: 400 devices at a true 30s interval, 68% of one core, no thermal
+  throttling.
 - **The poll loop now says when it is behind.** A saturated loop warns in the
   log (at most every 10 minutes, naming the current concurrency) and shows a
   warning on Settings, instead of quietly recording history at a longer
