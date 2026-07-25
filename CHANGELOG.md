@@ -13,6 +13,13 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **Docs: the nightly prune, and why the database file never shrinks.** Freed
+  pages are kept inside the file and reused, so lowering retention reclaims no
+  disk on its own and the file stays at its high-water mark - measured, a
+  648MB file holding 20MB of live data. That is normal rather than a leak, but
+  nothing said so, and someone lowering retention specifically to free space
+  would reasonably conclude the prune was broken. README now says it and
+  documents the one-off `VACUUM` that does return the space.
 - **Unreachable devices can no longer starve the ones that answer.** A device
   that responds holds a poll slot for ~50ms; one that does not holds it for a
   full timeout, ~10s - roughly 200x more - so about a dozen dark devices

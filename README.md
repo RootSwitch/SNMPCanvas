@@ -241,6 +241,33 @@ they cannot starve the ones that are answering, and the loop refills a freed
 slot immediately rather than waiting for the next scheduling tick. Down
 devices are simply re-checked less often the more of them there are.
 
+### The nightly prune, and why the file does not shrink
+
+History older than the retention setting is deleted nightly at 03:30, one
+entity at a time so the poll loop keeps running throughout. It is not free:
+pruning 13.9 million rows on a Pi 3B+ took about 15 minutes, during which the
+web UI was briefly unresponsive in bursts (a fifth of requests took over a
+second, the worst around eight). Polling continued and no device was falsely
+marked down, so the wall stays correct - it is the interface that gets choppy.
+A more typical Pi-sized fleet deletes a fraction of that and takes a couple of
+minutes. Deleting more history at once costs proportionally more, so the first
+prune after *lowering* retention is by far the most expensive one.
+
+**Lowering retention will not give you disk space back on its own.** SQLite
+keeps the freed pages inside the database file and reuses them for new
+samples, so the file stays at its high-water mark - a 648MB file can hold
+20MB of live data and never shrink. That is normal and self-correcting: the
+space is reused rather than leaked. If you actually need the space returned to
+the filesystem, stop SNMPCanvas and run a one-off compaction:
+
+```sh
+sqlite3 /path/to/snmpcanvas.db 'VACUUM;'
+```
+
+`VACUUM` rewrites the whole database and needs free space roughly equal to the
+current file size while it runs. It is not run automatically, because doing so
+unprompted on a large database would block for a long time.
+
 If the loop ever cannot keep up it says so - a warning in the log and on the
 Settings page - rather than silently recording history at a longer interval
 than the one configured.
