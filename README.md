@@ -30,7 +30,7 @@ small-footprint ethos carries over all the same - one container, one SQLite
 file, two runtime dependencies, and a frontend that is still plain
 HTML/CSS/JS with no build step.
 
-![Four SNMPCanvas themes, four views: the devices list on Classic, a TrueNAS device page with resource cards on Ember, a day of interface traffic with 95th-percentile lines on Blueprint, and the add-device discovery wizard on Glacier](docs/hero-quadrants.png)
+![Four SNMPCanvas themes, four views: a 21-device fleet on Classic, a core switch's CPU and temperature cards above its interface table on Ember, a day of traffic on that switch's WAN uplink on Blueprint, and the add-device wizard listing what it just discovered on Glacier](docs/hero-quadrants.png)
 
 ## How it works
 
