@@ -604,6 +604,20 @@ changes), affected interfaces are flagged **stale** in the UI; use
 vanished ones stop being polled but keep their history. On Cisco,
 `snmp-server ifindex persist` avoids the situation entirely.
 
+### The `poller` block
+
+Every export carries whether this instance is keeping up:
+
+```json
+"poller": { "behind": false, "overdueDevices": 0, "worstLateS": 0, "concurrency": 16 }
+```
+
+`behind` is true when reachable devices have missed a full poll interval (down
+devices are excluded - they are deprioritised on purpose). AlertCanvas raises a
+**warning** on it out of the box, because the failure mode is that nothing
+looks wrong: graphs keep drawing, just coarser than configured. The field is
+always present, so a consumer can tell "keeping up" from "too old to say".
+
 ### Schema v4
 
 `schemaVersion` is **4**. Three fields changed shape, purely to stop paying for

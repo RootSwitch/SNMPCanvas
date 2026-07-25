@@ -64,6 +64,10 @@ function primeSchedule() {
 }
 
 function start() {
+    // Let the exporter publish whether we are keeping up. Registered rather
+    // than imported the other way round: exporter.js must not require this
+    // module, since we already require it.
+    exporter.setHealthSource(health);
     primeSchedule();
     timer = setInterval(tick, TICK_MS);
     timer.unref?.();

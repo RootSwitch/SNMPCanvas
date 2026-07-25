@@ -13,6 +13,12 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **The export now says whether the poll loop is keeping up.** `snmp-status.json`
+  carries a `poller` block (`behind`, `overdueDevices`, `worstLateS`,
+  `concurrency`). The log and Settings already warned, but both need someone to
+  go and look - and the failure mode is precisely that nothing looks wrong.
+  AlertCanvas raises a warning on it by default, so degraded monitoring reaches
+  you through the same channel as a device going down. Additive, no schema bump.
 - **Docs: capacity depends on how fast your agents answer, not just how many.**
   Every previously published figure was measured against agents replying in
   under a millisecond. Re-measured on one 100-device fleet varying only reply

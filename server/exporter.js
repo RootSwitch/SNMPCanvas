@@ -14,6 +14,13 @@ const pkg = require('../package.json');
 let pending = null;      // debounce timer
 let lastError = null;    // surfaced on the settings page
 
+// The poller hands us its health reader at startup rather than us requiring
+// poller.js: poller.js already requires THIS module for scheduleWrite, and a
+// require cycle would leave one side holding a half-built exports object.
+// Default keeps the export shape stable if nothing ever registers.
+let pollerHealth = () => null;
+function setHealthSource(fn) { if (typeof fn === 'function') pollerHealth = fn; }
+
 const OPER_STATUS = { 1: 'up', 2: 'down', 3: 'testing', 4: 'unknown', 5: 'dormant', 6: 'notPresent', 7: 'lowerLayerDown' };
 
 function scheduleWrite() {
@@ -252,6 +259,14 @@ function write() {
         generator: `snmpcanvas/${pkg.version}`,
         generatedAt: new Date().toISOString(),
         pollIntervalSec: Math.max(globalInterval, maxDeviceInterval),
+        // Is this instance keeping up? Already in the log and on Settings, but
+        // both need someone to go and look - and the failure mode is precisely
+        // that nothing LOOKS wrong: samples keep arriving, just further apart
+        // than configured. Publishing it lets AlertCanvas say so through the
+        // same channel that reports a device down. Always present, never
+        // omitted when healthy: a consumer must be able to tell "keeping up"
+        // from "this SNMPCanvas is too old to tell you".
+        poller: pollerHealth(),
         devices,
         interfaces,
         metrics
@@ -271,4 +286,4 @@ function write() {
 
 function getLastError() { return lastError; }
 
-module.exports = { scheduleWrite, write, getLastError };
+module.exports = { scheduleWrite, write, getLastError, setHealthSource };
