@@ -570,6 +570,18 @@ changes), affected interfaces are flagged **stale** in the UI; use
 vanished ones stop being polled but keep their history. On Cisco,
 `snmp-server ifindex persist` avoids the situation entirely.
 
+Those interfaces also carry `"stale": true` in `interfaces[]`, and this is
+worth handling rather than ignoring. The index is *reused*, so the entry keeps
+the **old** `name` while the counters belong to whatever occupies that index
+**now** - a wall tile or an alert rule bound to `Gi0/1` can quietly report a
+different port's traffic, looking perfectly healthy while doing it. History
+under that name likewise splices two physical ports together with no
+discontinuity marker.
+
+The field is **omitted entirely when false**, not emitted as `false`: on a
+large fleet a `"stale": false` on every row adds hundreds of KB to a file that
+is rewritten in full on every poll. Treat absence as "not stale".
+
 ## Development
 
 ```

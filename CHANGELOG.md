@@ -13,6 +13,19 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **`snmp-status.json` now marks stale interfaces.** When an `ifIndex` starts
+  reporting a different `ifName` than the one recorded - a module swapped, a
+  VLAN interface recreated, a chassis renumbered on reboot - the entity was
+  already flagged stale in the UI, but the export said nothing. It kept
+  shipping the **old** name with counters from whatever occupies that index
+  **now**, and no consumer could tell: a wall tile or alert rule bound to
+  `Gi0/1` reported a different port's traffic and looked healthy doing it.
+  Affected entries now carry `"stale": true`. Additive and backward
+  compatible - the field is **omitted when false** rather than emitted as
+  `false`, because on a large fleet that would add hundreds of KB to a file
+  rewritten in full every poll. Verified against a fleet with half its
+  interfaces deliberately renamed: 198 stale in the database, 198 marked in
+  the export, no false positives or negatives.
 - **Docs: put `snmp-status.json` on a RAM disk.** Every write regenerates the
   whole file (coalesced to at most one per second), so bytes written scale with
   file size rather than with what changed. Measured on a 400-device /

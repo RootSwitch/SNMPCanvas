@@ -109,7 +109,7 @@ function write() {
 
     // --- interfaces[] (unchanged from v1) ---
     const ifRows = db.prepare(`
-        SELECT e.id, e.snmp_index, e.name, e.alias, e.speed_bps, e.admin_status, e.oper_status, e.code,
+        SELECT e.id, e.snmp_index, e.name, e.alias, e.speed_bps, e.admin_status, e.oper_status, e.code, e.stale,
                d.name AS device_name, d.host, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id
         WHERE e.export = 1 AND e.kind = 'if' AND d.enabled = 1
@@ -123,6 +123,18 @@ function write() {
             device: { name: r.device_name, host: r.host, status: r.device_status },
             ifIndex: Number(r.snmp_index),
             name: r.name,
+            // Present ONLY when true: this ifIndex is now reporting a different
+            // ifName than the one recorded at discovery - a module swapped, a
+            // VLAN interface recreated, a chassis renumbered on reboot. The
+            // index is reused, so `name` below is the OLD name while the
+            // counters are whatever occupies that index NOW. Without this a
+            // consumer cannot tell, and a wall tile or an alert rule bound to
+            // the old name silently reports someone else's traffic.
+            //
+            // Omitted rather than emitted as false: at 19,200 interfaces a
+            // `"stale": false` on every row adds ~300KB to an 11MB file that is
+            // rewritten in full on every poll. Absence means not stale.
+            ...(r.stale ? { stale: true } : {}),
             alias: r.alias || '',
             speedBps: r.speed_bps || null,
             adminStatus: deviceUp ? (OPER_STATUS[r.admin_status] || 'unknown') : 'unknown',
