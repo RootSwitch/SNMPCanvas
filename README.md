@@ -231,8 +231,18 @@ interval with every interface tracked and exported:
 The loop is single-threaded, so **one core is the ceiling** regardless of how
 many the machine has. A Pi 3B+ is therefore roughly a 400-500 device box at
 30s; anything x86 has enormous headroom (the same fleet costs a desktop Xeon
-about 4% of a core). Disk is rarely the constraint: history runs roughly
-17MB per tracked entity per 90 days.
+about 4% of a core).
+
+Disk is the other ceiling, and it is worth doing the multiplication before you
+commit to a retention window: history runs roughly **17MB per tracked entity
+per 90 days**, which is fine for a homelab and is not fine by default at fleet
+scale. The 4,800-entity fleet in the table above is about **80GB** at 90 days;
+a hundred 48-port switches with every port tracked is roughly **700MB a day**.
+Retention is per-instance, so the levers are the retention setting, the poll
+interval, and untracking ports you do not care about - an access switch's 48
+edge ports are usually 48 entities you will never open a graph for. Graph speed
+is not affected either way (long ranges are served from an hourly rollup), so
+this is purely a question of what the volume can hold.
 
 **How fast your devices answer matters as much as how many there are.** The
 figures above were measured against agents replying in well under a

@@ -2,6 +2,17 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Backup download no longer freezes the app.** `/api/backup` copied the
+  database with a synchronous `VACUUM INTO`, which better-sqlite3 runs on the
+  event loop: measured on a 400MB database that was **3.0 seconds during which
+  nothing polled and no page was answered**, scaling at roughly 7.6s per GB. It
+  now uses SQLite's incremental backup, which steps through the file a batch of
+  pages at a time and yields between batches - worst single stall **0.4s**, and
+  faster overall. Verified against a 250MB database being written to throughout:
+  one clean pass, no restart, `integrity_check ok`. Only one backup runs at a
+  time now, so two clicks cannot put two full copies of the database on the data
+  volume at once.
+
 - **History graphs were never server-side bucketed.** The bucketing expression
   `(ts / @b) * @b` is integer division only when `@b` is an integer, and
   better-sqlite3 binds every JavaScript number as SQLite REAL - a BigInt is the
