@@ -244,14 +244,20 @@ devices are simply re-checked less often the more of them there are.
 ### The nightly prune, and why the file does not shrink
 
 History older than the retention setting is deleted nightly at 03:30, one
-entity at a time so the poll loop keeps running throughout. It is not free:
-pruning 13.9 million rows on a Pi 3B+ took about 15 minutes, during which the
-web UI was briefly unresponsive in bursts (a fifth of requests took over a
-second, the worst around eight). Polling continued and no device was falsely
-marked down, so the wall stays correct - it is the interface that gets choppy.
-A more typical Pi-sized fleet deletes a fraction of that and takes a couple of
-minutes. Deleting more history at once costs proportionally more, so the first
-prune after *lowering* retention is by far the most expensive one.
+entity at a time, yielding the event loop between each so polling keeps
+running throughout. Measured on a Pi 3B+ pruning 13.9 million rows: **about 6
+minutes**, of which only **62 seconds is the deleting** (4800 deletes, median
+5ms, 95th percentile 21ms) and the closing checkpoint is under 200ms. The rest
+is the loop deliberately handing time back to polling. A handful of deletes -
+14 of 4800 - took over half a second, and the web UI pauses briefly when they
+do. Polling continues and no device is falsely marked down, so a wall driven
+off the export stays correct; it is the interface that gets choppy.
+
+Two things make it worse, both avoidable: pruning a lot at once (the first
+prune after *lowering* retention is by far the most expensive), and pruning
+immediately after a large bulk write, while much of the database is still
+sitting in the write-ahead log. The same 13.9M rows took 15 minutes rather
+than 6 when pruned directly after being inserted.
 
 **Lowering retention will not give you disk space back on its own.** SQLite
 keeps the freed pages inside the database file and reuses them for new

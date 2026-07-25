@@ -168,7 +168,32 @@ const VENDORS = [
                 { name: 'Board temperature', oid: '1.3.6.1.4.1.14988.1.1.3.10.0', div: 10 },
                 { name: 'CPU temperature', oid: '1.3.6.1.4.1.14988.1.1.3.11.0', div: 10 }
             ]
-        }
+        },
+        // Chassis fan tachometers in RPM, present on models that have fans and
+        // simply absent (GET returns nothing, no sensor created) on fanless
+        // boards. Verified against CRS317 and CRS309 walks: the CRS317 reads
+        // 3990 / 3960 RPM here and has no .3.10.0 board sensor, the fanless
+        // CRS309 has neither fan.
+        //
+        // The mtxrHealth table at .3.100 also carries sfp-temperature plus
+        // fan-state, psu1-state and psu2-state, and all three are deliberately
+        // NOT mapped:
+        //   - the states read 0 on every unit walked, and nothing establishes
+        //     whether 0 means healthy or faulted. A `state` entity alerts as
+        //     critical by DEFAULT, so guessing the polarity would either cry
+        //     wolf on healthy hardware or stay silent on a dead PSU. Settling
+        //     it needs a unit with a genuinely failed or absent supply.
+        //   - sfp-temperature exists only as row 50 of that table, with no
+        //     scalar equivalent, and row indexes are not known to be stable
+        //     across models - a wrong index would mislabel some other reading
+        //     as a temperature.
+        // Walking the .3.100 table wholesale is also wrong here: it mixes RPM,
+        // state and °C rows, and walk-descr-value has no notion of the type
+        // column that tells them apart.
+        metrics: [
+            { kind: 'fan', name: 'Fan 1', oid: '1.3.6.1.4.1.14988.1.1.3.17.0', div: 1 },
+            { kind: 'fan', name: 'Fan 2', oid: '1.3.6.1.4.1.14988.1.1.3.18.0', div: 1 }
+        ]
     },
     {
         // FS.COM S-series / Ruijie FSOS whitelabel switches (Broadcom-based).
