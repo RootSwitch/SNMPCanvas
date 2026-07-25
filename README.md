@@ -210,7 +210,7 @@ Node 20+: `npm install && npm start` (listens on `:9161`, data in `./data`).
 | `ADMIN_PASSWORD` | - | Pre-set the UI password (otherwise first-run setup page) |
 | `SNMPCANVAS_SECRET` | - | If set, SNMP credentials are AES-256-GCM encrypted at rest |
 | `SUITE_SECRET` | - | Opt-in suite single sign-on: accept signed login tokens from the [LaunchCanvas](https://github.com/RootSwitch/LaunchCanvas) portal (same value across the suite; see its README for the security model) |
-| `POLL_CONCURRENCY` | `16` | Max devices polled simultaneously. Slots spend their time waiting on UDP, not working, so raising this is cheap; at most half are ever given to devices already down, so unreachable kit cannot starve the rest |
+| `POLL_CONCURRENCY` | `16` | Max devices polled simultaneously. **Also settable in Settings** - the variable is an override, and when set the UI field goes read-only and says so. Slots spend their time waiting on UDP, not working, so raising this is cheap; at most half are ever given to devices already down, so unreachable kit cannot starve the rest |
 | `COOKIE_SECURE` | auto | `Secure` cookies: on with HTTPS, off with HTTP; set to override |
 | `TZ` | UTC | Timezone for the nightly prune and log timestamps |
 

@@ -526,6 +526,7 @@ const routes = [
     { method: 'GET', path: /^\/api\/settings$/, handler: (req, res) => {
         ok(res, {
             pollIntervalS: parseInt(getSetting('poll_interval_s'), 10),
+            pollConcurrency: poller.health().concurrency,
             retentionDays: parseInt(getSetting('retention_days'), 10),
             exportPath: getSetting('export_path'),
             exportError: exporter.getLastError(),
@@ -540,6 +541,17 @@ const routes = [
             const v = parseInt(body.pollIntervalS, 10);
             if (!v || v < 30) return bad(res, 'Polling interval must be at least 30 seconds.');
             setSetting('poll_interval_s', v);
+        }
+        if (body.pollConcurrency !== undefined) {
+            // Refuse rather than accept-and-ignore when the environment sets
+            // it: storing a number that has no effect is worse than saying so.
+            if (poller.health().concurrencySource === 'env') {
+                return bad(res, 'Poll concurrency is set by the POLL_CONCURRENCY environment variable, which takes precedence. Change it there (and restart) or unset it to manage this here.');
+            }
+            const v = parseInt(body.pollConcurrency, 10);
+            if (!v || v < 1 || v > 512) return bad(res, 'Poll concurrency must be between 1 and 512.');
+            setSetting('poll_concurrency', v);
+            poller.settingsChanged();   // take effect now, not on the next tick
         }
         if (body.retentionDays !== undefined) {
             const v = parseInt(body.retentionDays, 10);

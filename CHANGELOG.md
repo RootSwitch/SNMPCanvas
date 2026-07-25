@@ -13,6 +13,14 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **Poll concurrency is a Settings field, not just an environment variable.**
+  The behind warning tells you to raise it; sending someone to edit a compose
+  file and restart a container was a dead end for the small teams this is for.
+  The field shows the live value and how many polls are in flight, and explains
+  what a slot actually is. `POLL_CONCURRENCY` still **wins** where it is set -
+  an explicit deployment decision should not be silently overridden from a web
+  page - and the UI then goes read-only saying exactly that, and where to change
+  it instead. Changes reach the running poll loop immediately.
 - **The export now says whether the poll loop is keeping up.** `snmp-status.json`
   carries a `poller` block (`behind`, `overdueDevices`, `worstLateS`,
   `concurrency`). The log and Settings already warned, but both need someone to

@@ -22,7 +22,32 @@ const TICK_MS = 5000;
 // up at all, 16 held a true 30s interval at 80% of a core, 32 self-limited to
 // 24 in flight. 16 is the default because it is the largest value proven safe
 // on the weakest box the suite targets.
-const CONCURRENCY = Math.max(1, parseInt(process.env.POLL_CONCURRENCY || '16', 10) || 16);
+const CONCURRENCY_DEFAULT = 16;
+const CONCURRENCY_MAX = 512;
+
+// Settable from the UI, because the warning this app prints when it falls
+// behind says "raise POLL_CONCURRENCY" - and telling someone to edit a compose
+// file and restart a container is a dead end for the small teams this is aimed
+// at. The environment variable still WINS where it is set: that is an explicit
+// deployment decision, and silently overriding it from a web page would be
+// worse than not offering the field at all. The UI says which one is in force.
+const CONCURRENCY_ENV = process.env.POLL_CONCURRENCY
+    ? Math.min(CONCURRENCY_MAX, Math.max(1, parseInt(process.env.POLL_CONCURRENCY, 10) || CONCURRENCY_DEFAULT))
+    : null;
+
+// Re-read once per tick rather than per pump(): pump runs on every poll
+// completion (thousands a minute on a large fleet), and a settings lookup there
+// would be pure overhead. A change therefore takes effect within one tick.
+let concurrencyCache = null;
+function readConcurrency() {
+    if (CONCURRENCY_ENV != null) return CONCURRENCY_ENV;
+    const v = parseInt(getSetting('poll_concurrency'), 10);
+    return Math.min(CONCURRENCY_MAX, Math.max(1, v || CONCURRENCY_DEFAULT));
+}
+function concurrency() {
+    if (concurrencyCache == null) concurrencyCache = readConcurrency();
+    return concurrencyCache;
+}
 
 // Devices already known down may occupy at most half the slots. Without this,
 // enough dark devices starve every healthy one: each holds a slot for a full
@@ -30,7 +55,7 @@ const CONCURRENCY = Math.max(1, parseInt(process.env.POLL_CONCURRENCY || '16', 1
 // how small the rest of the fleet was. Down devices consequently get repolled
 // more slowly the more of them there are, which is the right trade - it is also
 // most of what an explicit per-device backoff would have bought.
-const DOWN_SLOT_MAX = Math.max(1, Math.floor(CONCURRENCY / 2));
+function downSlotMax() { return Math.max(1, Math.floor(concurrency() / 2)); }
 const DEVICE_WALL_CLOCK_MS = 60 * 1000;   // hard cap per device poll
 const DOWN_AFTER_FAILURES = 2;            // one missed poll is not "down"
 const META_REFRESH_EVERY = 12;            // ifName/ifAlias/ifHighSpeed refresh cadence
@@ -71,7 +96,7 @@ function start() {
     primeSchedule();
     timer = setInterval(tick, TICK_MS);
     timer.unref?.();
-    log(`started (tick ${TICK_MS / 1000}s, concurrency ${CONCURRENCY})`);
+    log(`started (tick ${TICK_MS / 1000}s, concurrency ${concurrency()}${CONCURRENCY_ENV != null ? ' from POLL_CONCURRENCY' : ''})`);
 }
 
 function stop() {
@@ -106,6 +131,7 @@ function tick() {
 // deleted behind the API's back still gets picked up, and so pump() - which
 // runs far more often - can work off memory alone.
 function reconcile() {
+    concurrencyCache = readConcurrency();   // a Settings change takes effect within one tick
     const enabled = db.prepare('SELECT id FROM devices WHERE enabled = 1').all();
     const live = new Set(enabled.map((r) => r.id));
     for (const id of nextDue.keys()) if (!live.has(id)) nextDue.delete(id);
@@ -125,7 +151,7 @@ function reconcile() {
 // Called on every tick AND as each poll finishes, so a slot freed 200ms into a
 // tick is reused at 200ms rather than idling out the remaining 4.8 seconds.
 function pump() {
-    if (inFlight.size >= CONCURRENCY) return;
+    if (inFlight.size >= concurrency()) return;
     const now = Date.now();
     const due = [];
     for (const [id, at] of nextDue) {
@@ -137,11 +163,11 @@ function pump() {
     // Walk the WHOLE due list rather than the first `free` of it: a run of down
     // devices at the head must be skipped past, not allowed to consume the pass.
     for (const [id] of due) {
-        if (inFlight.size >= CONCURRENCY) break;
+        if (inFlight.size >= concurrency()) break;
         const device = byId.get(id);
         if (!device || !device.enabled) { nextDue.delete(id); continue; }
         const isDown = device.status === 'down';
-        if (isDown && downInFlight.size >= DOWN_SLOT_MAX) continue;   // keep slots for reachable devices
+        if (isDown && downInFlight.size >= downSlotMax()) continue;   // keep slots for reachable devices
         inFlight.add(id);
         if (isDown) downInFlight.add(id);
         scheduleNext(device); // schedule next poll now; overruns skip, never queue twice
@@ -190,11 +216,24 @@ function checkBehind() {
     lastBehindLog = now;
     log(`WARNING: poll loop is behind - ${overdue} reachable device(s) have missed a full interval, worst is `
         + `${behind.worstLateS}s overdue. Effective interval is longer than configured. `
-        + `Raise POLL_CONCURRENCY (currently ${CONCURRENCY}), lengthen the poll interval, or split the fleet.`);
+        + `Raise poll concurrency (currently ${concurrency()}), lengthen the poll interval, or split the fleet.`);
 }
 
+// The API calls this after a settings write so a change is live immediately
+// rather than up to a tick later - without it, saving a new concurrency and
+// re-reading the page showed the OLD value, which reads as "it ignored me".
+function settingsChanged() { concurrencyCache = readConcurrency(); }
+
 function health() {
-    return { ...behind, concurrency: CONCURRENCY, inFlight: inFlight.size, scheduled: nextDue.size };
+    return {
+        ...behind,
+        concurrency: concurrency(),
+        // Where the number came from, so the UI can explain why its field is
+        // read-only on a deployment that sets the variable.
+        concurrencySource: CONCURRENCY_ENV != null ? 'env' : 'setting',
+        inFlight: inFlight.size,
+        scheduled: nextDue.size
+    };
 }
 
 async function pollDevice(device) {
@@ -526,4 +565,4 @@ function prune() {
     }
 }
 
-module.exports = { start, stop, deviceChanged, deviceRemoved, prune, health };
+module.exports = { start, stop, deviceChanged, deviceRemoved, prune, health, settingsChanged };

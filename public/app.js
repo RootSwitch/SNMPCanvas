@@ -1178,12 +1178,27 @@
                 <span><input type="number" id="s-interval" value="${s.pollIntervalS}" min="30" style="width:110px"> seconds</span>
                 <label>History retention</label>
                 <span><input type="number" id="s-retention" value="${s.retentionDays}" min="1" style="width:110px"> days (pruned nightly at 03:30)</span>
+                <label>Poll concurrency</label>
+                <span><input type="number" id="s-concurrency" value="${s.pollConcurrency}" min="1" max="512" style="width:110px"
+                    ${s.poller && s.poller.concurrencySource === 'env' ? 'disabled' : ''}> devices polled at once
+                    <span class="muted small">(${s.poller ? s.poller.inFlight : 0} in flight now)</span></span>
             </div>
+            <div class="muted small" style="margin-top:8px">
+                A slot is one outstanding SNMP request, not a worker - it spends its time waiting for a
+                reply, so raising this costs very little and is the usual fix when the loop falls behind.
+                Slow devices (PDUs, BMCs) need more of them than fast switches do. At most half are ever
+                given to devices already marked down, so unreachable kit cannot starve the rest.
+            </div>
+            ${s.poller && s.poller.concurrencySource === 'env' ? `<div class="muted small" style="margin-top:6px">
+                This field is read-only because <code>POLL_CONCURRENCY=${s.poller.concurrency}</code> is set in
+                this container's environment, which takes precedence. Change it there (in your
+                <code>docker-compose.yml</code> under <code>environment:</code>, then <code>docker compose up -d</code>),
+                or remove it to manage the value here.</div>` : ''}
             ${s.poller && s.poller.behind ? `<div class="warn-text small" style="margin-top:10px">
                 The poll loop is behind: ${s.poller.overdueDevices} device${s.poller.overdueDevices === 1 ? '' : 's'}
                 ${s.poller.overdueDevices === 1 ? 'has' : 'have'} missed a full interval, worst is
                 ${s.poller.worstLateS}s overdue. History is being recorded at a longer interval than the one set here.
-                Raise POLL_CONCURRENCY (currently ${s.poller.concurrency}), lengthen the interval, or split the fleet.</div>` : ''}
+                Raise poll concurrency above (currently ${s.poller.concurrency}), lengthen the interval, or split the fleet.</div>` : ''}
         </div>
         <div class="panel">
             <h2>Interface export</h2>
@@ -1238,10 +1253,15 @@
         document.getElementById('s-save').addEventListener('click', async () => {
             const msg = document.getElementById('s-msg');
             try {
+                const conc = document.getElementById('s-concurrency');
                 await api('PATCH', '/api/settings', {
                     pollIntervalS: parseInt(document.getElementById('s-interval').value, 10),
                     retentionDays: parseInt(document.getElementById('s-retention').value, 10),
-                    exportPath: document.getElementById('s-export').value
+                    exportPath: document.getElementById('s-export').value,
+                    // Omitted when the environment owns it: sending a value the
+                    // server must refuse would fail the whole save over a field
+                    // the operator cannot even edit.
+                    ...(conc && !conc.disabled ? { pollConcurrency: parseInt(conc.value, 10) } : {})
                 });
                 msg.className = 'ok-text'; msg.textContent = 'Saved.';
             } catch (e) { msg.className = 'error-text'; msg.textContent = e.message; }

@@ -239,6 +239,7 @@ const setSettingStmt = db.prepare(
 
 const DEFAULTS = {
     poll_interval_s: '30',
+    poll_concurrency: '16',
     retention_days: '90',
     export_path: path.join(DATA_DIR, 'snmp-status.json')
 };
