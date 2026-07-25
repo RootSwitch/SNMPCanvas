@@ -13,6 +13,16 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **`snmp-status.json` is ~35% smaller.** It is written minified rather than
+  pretty-printed - measured on a real export, **31% of the file was indentation
+  and newlines**, paid for again on every poll in disk writes and in every
+  consumer's parse. Nothing reads it by eye; `jq .` handles inspection. Rates
+  are also rounded: throughput to whole bits per second (the extra ~16
+  significant digits are arithmetic residue from dividing a counter delta),
+  errors and discards to three decimals - deliberately *not* to whole numbers,
+  because those are events per second and one error every twenty minutes is a
+  real 0.0008/s that whole-number rounding would erase. No shape change, so
+  consumers need no update. Measured on a live export: 278KB to 182KB.
 - **`snmp-status.json` now marks stale interfaces.** When an `ifIndex` starts
   reporting a different `ifName` than the one recorded - a module swapped, a
   VLAN interface recreated, a chassis renumbered on reboot - the entity was

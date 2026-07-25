@@ -453,7 +453,9 @@ label line or a connection annotation. Braces are required on labels and
 optional on annotations, so the braced form always works; text around the
 token is the board author's own (`Rx {K7Q2}` renders as `Rx ▼56M ▲32M`).
 
-The v1 `interfaces[]` shape is unchanged:
+The v1 `interfaces[]` shape is unchanged (shown indented here for reading - the
+real file is **minified**, since it is rewritten in full on every poll and
+indentation was 31% of it; pipe it through `jq .` to inspect one by eye):
 
 ```json
 {
