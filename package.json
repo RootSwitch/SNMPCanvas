@@ -15,7 +15,8 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "mock-agent": "node tools/mock-agent.js"
+    "mock-agent": "node tools/mock-agent.js",
+    "check-history": "node tools/check-history.js"
   },
   "engines": {
     "node": ">=20"

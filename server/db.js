@@ -95,6 +95,31 @@ CREATE TABLE IF NOT EXISTS samples (
   PRIMARY KEY (entity_id, ts)
 ) WITHOUT ROWID;
 
+-- Hourly rollup of the samples table, so a long history chart need not read
+-- every raw row to draw 500 points.
+--
+-- What this solves is not fleet size, it is RETENTION: 90 days at a 30s
+-- interval is ~259,200 rows PER ENTITY whether you watch five devices or five
+-- hundred. Aggregating that range measured 14 seconds on a Raspberry Pi - and
+-- better-sqlite3 is synchronous, so those were 14 seconds in which nothing
+-- polled and the UI was frozen for everyone. An hour of 30s samples is 120
+-- rows collapsing to one, so a 90-day chart reads ~2,160 rows instead.
+--
+-- The n column is the sample count behind each row, and it is not decoration:
+-- re-bucketing hours into (say) 4-hour chart buckets needs a WEIGHTED mean,
+-- sum(a0*n)/sum(n). Averaging the averages would mis-weight any hour that was
+-- short a few polls - exactly the hours when the poller was struggling and the
+-- chart matters most.
+CREATE TABLE IF NOT EXISTS samples_hourly (
+  entity_id INTEGER NOT NULL,
+  hour_ts   INTEGER NOT NULL,
+  n         INTEGER NOT NULL,
+  a0 REAL, a1 REAL, a2 REAL, a3 REAL, a4 REAL, a5 REAL,
+  m0 REAL, m1 REAL,
+  st INTEGER,
+  PRIMARY KEY (entity_id, hour_ts)
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   created_ts INTEGER NOT NULL,

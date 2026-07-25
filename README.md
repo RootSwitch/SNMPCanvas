@@ -54,10 +54,11 @@ written to a small JSON status file every cycle, for other tools to read.
   rates, errors, and discards. A filter box and per-interface Track/Export
   toggles keep big switches manageable.
 - **History graphs** - click any interface or resource card: traffic
-  (average + peak), errors/discards, a link-status strip, and dashed
-  95th-percentile lines, from 1 hour to 90 days. Charts are hand-drawn SVG
-  that follows the app theme, with an optional link-speed scale for honest
-  utilization reading.
+  (average + peak), errors/discards and a link-status strip, from 1 hour to
+  90 days. Charts are hand-drawn SVG that follows the app theme, with an
+  optional link-speed scale for honest utilization reading. Ranges of a day
+  or more are served from an hourly rollup, so a 90-day graph stays fast on
+  a Raspberry Pi.
 - **Add-device flow** - enter an address and credentials; SNMPCanvas
   verifies with a GET, walks the standard tables, and shows you everything
   it found so you choose what gets tracked. No MIB files involved -

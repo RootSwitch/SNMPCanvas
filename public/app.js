@@ -1051,10 +1051,6 @@
             chartBlock(wrap, 'Traffic', {
                 ...opts, unit: 'bps',
                 yMax: scaleToLink && data.speedBps > 0 ? data.speedBps : undefined,
-                hlines: data.p95 ? [
-                    { value: data.p95.in, cls: 'a', label: '95th in' },
-                    { value: data.p95.out, cls: 'b', label: '95th out' }
-                ] : [],
                 series: [
                     { label: 'In (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
                     { label: 'In (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) },

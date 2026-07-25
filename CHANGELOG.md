@@ -2,6 +2,35 @@
 
 ## Unreleased (since 1.0.0)
 
+- **History graphs were never server-side bucketed.** The bucketing expression
+  `(ts / @b) * @b` is integer division only when `@b` is an integer, and
+  better-sqlite3 binds every JavaScript number as SQLite REAL - a BigInt is the
+  only way to bind an integer. Bound as a number the expression returned `ts`
+  unchanged, every row landed in its own group, `GROUP BY` grouped nothing and
+  the `maxPoints` limit did nothing at all. The endpoint had been returning one
+  point per raw sample: **259,200 points and ~18 MB for a 90-day range instead
+  of ~430 points and 30 KB**. It went unnoticed because the chart still drew
+  correctly - just from 600x more data than it needed, with the whole query
+  blocking the poll loop and every other user's page while it ran. Now bound as
+  a BigInt, with `tools/check-history.js` to keep it honest.
+- **90-day graphs no longer read 90 days of raw samples.** A new hourly rollup
+  table (`samples_hourly`) summarises each completed hour, and any chart bucket
+  of an hour or more is served from it - about 2,160 rows for a 90-day range in
+  place of 259,200. The rollup runs every 10 minutes in chunks that yield the
+  event loop, follows the same retention as the raw samples, and stores the
+  sample count behind each row so re-bucketing uses a weighted mean (an hour
+  short a few polls must not count the same as a full one). This is about
+  RETENTION, not fleet size: 90 days at 30 seconds is a quarter-million rows
+  per entity whether you watch five devices or five hundred, so a homelab
+  Raspberry Pi hits it as surely as a large fleet does. Measured against the
+  same request served from raw data: **~50x faster at 30 days, ~110x at 90**.
+  Chart buckets past an hour snap to whole hours so the rolled-up answer is
+  identical to the raw one rather than merely close.
+- **95th-percentile lines removed from traffic graphs.** Two unindexed sorts of
+  the whole range per chart, which on a Pi cost 750 ms of blocked event loop on
+  a 90-day view. The lines were also the first thing to become unreadable on a
+  busy graph. The underlying data is unchanged; nothing else used them.
+
 - **Poll scheduler: freed slots refill immediately.** Polls were only ever
   started on the 5-second tick, which capped the loop at `POLL_CONCURRENCY`
   starts per tick - 48 polls/minute on defaults, however fast devices

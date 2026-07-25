@@ -449,31 +449,76 @@ const routes = [
         const from = parseInt(query.get('from'), 10) || (to - 24 * 3600);
         const maxPoints = Math.min(2000, Math.max(50, parseInt(query.get('maxPoints'), 10) || 500));
         const base = e.dev_interval || parseInt(getSetting('poll_interval_s'), 10) || 300;
-        const bucket = Math.max(base, Math.ceil((to - from) / maxPoints / base) * base);
-        const rows = db.prepare(`
-            SELECT (ts / @b) * @b AS t,
-                   avg(v0) a0, max(v0) m0, avg(v1) a1, max(v1) m1,
-                   avg(v2) a2, avg(v3) a3, avg(v4) a4, avg(v5) a5,
-                   min(status) st
-            FROM samples WHERE entity_id = @id AND ts >= @from AND ts <= @to
-            GROUP BY t ORDER BY t`).all({ b: bucket, id: e.id, from, to });
-        // 95th percentile of the raw (unbucketed) samples in range - the
-        // classic capacity-planning number, for interfaces only.
-        let p95 = null;
-        if (e.kind === 'if') {
-            const pct = (col) => {
-                const n = db.prepare(`SELECT count(*) c FROM samples WHERE entity_id = ? AND ts >= ? AND ts <= ? AND ${col} IS NOT NULL`)
-                    .get(e.id, from, to).c;
-                if (n < 20) return null; // too few samples to be meaningful
-                return db.prepare(`SELECT ${col} v FROM samples WHERE entity_id = ? AND ts >= ? AND ts <= ? AND ${col} IS NOT NULL
-                                   ORDER BY ${col} LIMIT 1 OFFSET ?`)
-                    .get(e.id, from, to, Math.floor(n * 0.95)).v;
-            };
-            p95 = { in: pct('v0'), out: pct('v1') };
-        }
+        let bucket = Math.max(base, Math.ceil((to - from) / maxPoints / base) * base);
+        // Past an hour per bucket the data comes from the hourly rollup, and a
+        // bucket that is not a whole number of hours cannot be rebuilt from it:
+        // an hour straddling a bucket edge would land entirely on one side
+        // instead of being split. Snap up to the next whole hour so every hour
+        // belongs to exactly one bucket. Costs a few points at the wide end (a
+        // 90-day chart draws 432 rather than 500) and makes the rolled-up
+        // answer identical to the raw one instead of merely close.
+        if (bucket > 3600) bucket = Math.ceil(bucket / 3600) * 3600;
+        // Where the numbers come from depends on how wide the chart is.
+        //
+        // Under an hour per bucket, read the raw samples - that is the only
+        // place the detail exists. At an hour or more, read samples_hourly,
+        // which already collapsed each hour to one row. Both are fed through
+        // one UNION so a bucket that straddles the rollup frontier (hourly
+        // rows behind it, raw rows in front) still comes out as a single
+        // point: an hourly row enters as a pre-aggregate of n samples, a raw
+        // row as an aggregate of one.
+        //
+        // Hence the WEIGHTED mean, sum(a0*n)/sum(n), rather than avg(a0).
+        // Averaging averages would give an hour that only managed 40 polls the
+        // same weight as a full hour of 120 - flattering exactly the periods
+        // when the poller was struggling. (A column that is NULL for a kind
+        // stays NULL throughout, so no partially-null column is mis-weighted.)
+        // The frontier is floored to an hour before it splits the two sources.
+        // The rollup only ever advances it to an hour boundary, but if it were
+        // ever mid-hour the two WHERE clauses below would overlap: the hourly
+        // row for that hour would be counted AND so would the raw samples from
+        // the frontier to the end of it.
+        const mark = Math.floor((parseInt(getSetting('rollup_through_ts'), 10) || 0) / 3600) * 3600;
+        // @b is bound as a BigInt on purpose, and the bucketing is wrong
+        // without it. better-sqlite3 binds every JS number as SQLite REAL and
+        // only a BigInt as INTEGER, so `ts / @b` was FLOAT division: dividing
+        // and re-multiplying returned ts unchanged, every row landed in its own
+        // bucket, and GROUP BY grouped nothing. Charts silently shipped one
+        // point per raw sample - 259,200 of them for a 90-day range - and
+        // maxPoints below was never actually enforced.
+        const b = BigInt(bucket);
+        const rows = bucket < 3600
+            ? db.prepare(`
+                SELECT (ts / @b) * @b AS t,
+                       avg(v0) a0, max(v0) m0, avg(v1) a1, max(v1) m1,
+                       avg(v2) a2, avg(v3) a3, avg(v4) a4, avg(v5) a5,
+                       min(status) st
+                FROM samples WHERE entity_id = @id AND ts >= @from AND ts <= @to
+                GROUP BY t ORDER BY t`).all({ b, id: e.id, from, to })
+            : db.prepare(`
+                SELECT (sts / @b) * @b AS t,
+                       sum(a0 * n) / sum(n) a0, max(m0) m0,
+                       sum(a1 * n) / sum(n) a1, max(m1) m1,
+                       sum(a2 * n) / sum(n) a2, sum(a3 * n) / sum(n) a3,
+                       sum(a4 * n) / sum(n) a4, sum(a5 * n) / sum(n) a5,
+                       min(st) st
+                FROM (
+                    -- 'sts' rather than 't': naming this column t as well
+                    -- would make the outer GROUP BY t bind to THIS column
+                    -- instead of the bucket expression above it, silently
+                    -- grouping by raw hour and returning 24 points per day.
+                    SELECT hour_ts sts, n, a0, a1, a2, a3, a4, a5, m0, m1, st
+                    FROM samples_hourly
+                    WHERE entity_id = @id AND hour_ts >= @from AND hour_ts <= @to AND hour_ts < @mark
+                    UNION ALL
+                    SELECT ts, 1, v0, v1, v2, v3, v4, v5, v0, v1, status
+                    FROM samples
+                    WHERE entity_id = @id AND ts >= max(@from, @mark) AND ts <= @to
+                )
+                GROUP BY t ORDER BY t`).all({ b, id: e.id, from, to, mark });
         const sx = e.extra ? JSON.parse(e.extra) : {};
         ok(res, {
-            kind: e.kind, name: e.name, code: e.code || null, speedBps: e.speed_bps, bucketSec: bucket, from, to, p95,
+            kind: e.kind, name: e.name, code: e.code || null, speedBps: e.speed_bps, bucketSec: bucket, from, to,
             unit: sx.unit || undefined, meterMax: sx.max || undefined,
             okText: sx.okText || undefined, alarmText: sx.alarmText || undefined,
             points: rows.map((r) => [r.t, r.a0, r.m0, r.a1, r.m1, r.a2, r.a3, r.a4, r.a5, r.st])

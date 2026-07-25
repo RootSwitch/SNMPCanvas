@@ -119,6 +119,7 @@ function deviceRemoved(deviceId) {
 function tick() {
     try {
         maybePrune();
+        maybeRollup();
         reconcile();
         pump();
     } catch (err) {
@@ -548,6 +549,11 @@ function prune() {
         const cutoff = Math.floor(Date.now() / 1000) - retentionDays * 86400;
         const entityIds = db.prepare('SELECT id FROM entities').all().map((r) => r.id);
         const del = db.prepare('DELETE FROM samples WHERE entity_id = ? AND ts < ?');
+        // The rollup obeys the same retention as the raw rows it summarises.
+        // Retention is a promise about how long data is KEPT, and an hourly
+        // average is still that data - leaving it behind would quietly turn a
+        // 90-day setting into forever.
+        const delHourly = db.prepare('DELETE FROM samples_hourly WHERE entity_id = ? AND hour_ts < ?');
         let total = 0;
         const step = (i) => {
             if (i >= entityIds.length) {
@@ -557,6 +563,7 @@ function prune() {
                 return;
             }
             total += del.run(entityIds[i], cutoff).changes;
+            delHourly.run(entityIds[i], cutoff);
             setImmediate(() => step(i + 1)); // yield the event loop between entities
         };
         step(0);
@@ -565,4 +572,89 @@ function prune() {
     }
 }
 
-module.exports = { start, stop, deviceChanged, deviceRemoved, prune, health, settingsChanged };
+// --- hourly rollup ----------------------------------------------------------
+// Collapses completed hours of `samples` into one row per entity per hour, so
+// that opening a 90-day graph reads ~2,160 rows instead of ~259,200. Measured
+// on a Raspberry Pi 3B+ the unrolled 90-day query took 14 SECONDS - and
+// better-sqlite3 is synchronous, so that was 14 seconds in which no device was
+// polled and every other user's page hung too. One person opening one graph
+// stalled the whole instance.
+//
+// Runs on a timer rather than nightly like the prune: the point is for a chart
+// opened at 14:05 to be able to use rolled-up data from 13:00, not to wait for
+// 03:30. Only COMPLETE hours are rolled up - the current hour is still
+// receiving samples, and a row summarising a partial hour would be wrong until
+// re-summarised.
+const ROLLUP_EVERY_MS = 10 * 60 * 1000;
+const ROLLUP_CHUNK_S = 6 * 3600;   // hours aggregated per event-loop yield
+let rollupAt = 0;
+let rollupRunning = false;
+
+function maybeRollup() {
+    if (rollupRunning || Date.now() < rollupAt) return;
+    rollupAt = Date.now() + ROLLUP_EVERY_MS;
+    setImmediate(rollup);
+}
+
+function rollup() {
+    let from;
+    let nowHour;
+    try {
+        nowHour = Math.floor(Date.now() / 1000 / 3600) * 3600;
+        from = parseInt(getSetting('rollup_through_ts'), 10) || 0;
+        if (!from) {
+            // First run on an existing database: start at the oldest sample, so
+            // history that predates this feature still gets summarised.
+            const oldest = db.prepare('SELECT MIN(ts) m FROM samples').get().m;
+            if (oldest == null) { setRollupMark(nowHour); return; }
+            from = Math.floor(oldest / 3600) * 3600;
+        }
+        if (from >= nowHour) return;
+    } catch (err) {
+        log('rollup failed to start:', err.message);
+        return;
+    }
+
+    rollupRunning = true;
+    const started = Date.now();
+    const backfill = nowHour - from > 2 * ROLLUP_CHUNK_S;
+    // INSERT OR REPLACE, not INSERT: the last chunk of a previous run may have
+    // covered an hour that was still in progress on a clock skew, and a device
+    // added mid-hour produces rows for an hour already summarised. Replacing is
+    // idempotent; ignoring would freeze a wrong average in place.
+    const roll = db.prepare(`
+        INSERT OR REPLACE INTO samples_hourly (entity_id, hour_ts, n, a0, a1, a2, a3, a4, a5, m0, m1, st)
+        SELECT entity_id, (ts / 3600) * 3600, count(*),
+               avg(v0), avg(v1), avg(v2), avg(v3), avg(v4), avg(v5),
+               max(v0), max(v1), min(status)
+        FROM samples WHERE ts >= ? AND ts < ?
+        GROUP BY entity_id, (ts / 3600) * 3600`);
+
+    let rows = 0;
+    const step = (start) => {
+        if (start >= nowHour) {
+            rollupRunning = false;
+            if (backfill) log(`rollup backfill finished: ${rows} hourly rows in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+            return;
+        }
+        const end = Math.min(start + ROLLUP_CHUNK_S, nowHour);
+        try {
+            rows += roll.run(start, end).changes;
+            setRollupMark(end);
+        } catch (err) {
+            // Leave the mark where it was so the next run retries this chunk.
+            rollupRunning = false;
+            log('rollup failed:', err.message);
+            return;
+        }
+        setImmediate(() => step(end)); // yield between chunks, as the prune does
+    };
+    step(from);
+}
+
+function setRollupMark(ts) {
+    db.prepare("INSERT INTO settings (key, value) VALUES ('rollup_through_ts', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(String(ts));
+}
+
+module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged };
