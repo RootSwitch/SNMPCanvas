@@ -453,30 +453,32 @@ label line or a connection annotation. Braces are required on labels and
 optional on annotations, so the braced form always works; text around the
 token is the board author's own (`Rx {K7Q2}` renders as `Rx ▼56M ▲32M`).
 
-The v1 `interfaces[]` shape is unchanged (shown indented here for reading - the
-real file is **minified**, since it is rewritten in full on every poll and
-indentation was 31% of it; pipe it through `jq .` to inspect one by eye):
+`interfaces[]` in schema v4 (shown indented here for reading - the real file is
+**minified**, since it is rewritten in full on every poll and indentation was
+31% of it; pipe it through `jq .` to inspect one by eye):
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 4,
   "generator": "snmpcanvas/1.0.0",
   "generatedAt": "2026-07-16T14:05:03Z",
+  "devices": [
+    { "name": "core-sw1", "host": "10.0.0.2", "status": "up" }
+  ],
   "interfaces": [
     {
-      "id": "core-sw1:eth0",
       "code": "K7Q2",
-      "device": { "name": "core-sw1", "host": "10.0.0.2", "status": "up" },
+      "device": "core-sw1",
       "ifIndex": 1,
       "name": "eth0",
       "alias": "uplink to fw",
       "speedBps": 1000000000,
       "adminStatus": "up",
       "operStatus": "up",
-      "sampledAt": "2026-07-16T14:05:01Z",
-      "inBps": 12345678.9,
-      "outBps": 234567.1,
-      "inErrorsPerSec": 0,
+      "sampledAt": 1784980801,
+      "inBps": 12345678,
+      "outBps": 234567,
+      "inErrorsPerSec": 0.033,
       "outErrorsPerSec": 0,
       "inDiscardsPerSec": 0,
       "outDiscardsPerSec": 0
@@ -571,6 +573,25 @@ changes), affected interfaces are flagged **stale** in the UI; use
 **Rediscover** on the device page to reconcile - new entities are added,
 vanished ones stop being polled but keep their history. On Cisco,
 `snmp-server ifindex persist` avoids the situation entirely.
+
+### Schema v4
+
+`schemaVersion` is **4**. Three fields changed shape, purely to stop paying for
+the same bytes on every rewrite:
+
+| v3 | v4 | why |
+|---|---|---|
+| `device: { name, host, status }` on every interface | `device: "core-sw1"` | `devices[]` has listed name/host/status since v3, so a 48-port switch serialised the same host and status 48 times. Join `devices[]` on the name if you need them. |
+| `id: "core-sw1:eth0"` | *(gone)* | it was exactly `device + ":" + name` - two adjacent fields already said it |
+| `sampledAt: "2026-07-16T14:05:01Z"` | `sampledAt: 1784980801` | epoch seconds; nothing renders it to a human |
+
+Measured on a real 400-interface export, v4 plus minifying and rate rounding
+took the file from 696 to 361 bytes per interface - **48% smaller**.
+
+PingCanvas and AlertCanvas accept **either** schema, so the suite's apps can be
+upgraded in any order. If you consume this file yourself, the v3 shape keeps
+working against older SNMPCanvas releases; read `schemaVersion` if you need to
+branch.
 
 Those interfaces also carry `"stale": true` in `interfaces[]`, and this is
 worth handling rather than ignoring. The index is *reused*, so the entry keeps

@@ -13,6 +13,14 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **snmp-status.json schema v4**: `device` on each interface is now the device
+  NAME rather than a `{name, host, status}` object (a 48-port switch serialised
+  the same host and status 48 times, while `devices[]` has listed all three
+  since v3); `id` is gone because it was exactly `device + ":" + name`; and
+  `sampledAt` is epoch seconds instead of a 24-character ISO string. With
+  minifying and rate rounding, a real 400-interface export went from **696 to
+  361 bytes per interface - 48% smaller**. PingCanvas and AlertCanvas accept
+  **either** schema, so suite apps can be upgraded in any order.
 - **`snmp-status.json` is ~35% smaller.** It is written minified rather than
   pretty-printed - measured on a real export, **31% of the file was indentation
   and newlines**, paid for again on every poll in disk writes and in every

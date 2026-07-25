@@ -1,5 +1,5 @@
 'use strict';
-// snmp-status.json writer (schema v3): every poll cycle, exported interfaces
+// snmp-status.json writer (schema v4): every poll cycle, exported interfaces
 // go to interfaces[] (link color + bandwidth pills in PingCanvas) and every
 // other exported sensor goes to metrics[] as { code, kind, host, display }.
 // SNMPCanvas owns the display formatting; the kiosk is a code -> display
@@ -131,9 +131,16 @@ function write() {
         const s = latest.get(r.id);
         const deviceUp = r.device_status === 'up';
         return {
-            id: `${r.device_name}:${r.name}`,
+            // v4: `device` is the device NAME, not an object. v3 repeated
+            // {name, host, status} on every interface even though devices[]
+            // has listed all three since v3 - on a 48-port switch that is the
+            // same host and status serialised 48 times. Consumers that want
+            // host or status join devices[] on this name.
+            //
+            // `id` is gone with it: it was exactly `device + ':' + name`, so
+            // it cost bytes to restate what two adjacent fields already say.
             code: r.code,
-            device: { name: r.device_name, host: r.host, status: r.device_status },
+            device: r.device_name,
             ifIndex: Number(r.snmp_index),
             name: r.name,
             // Present ONLY when true: this ifIndex is now reporting a different
@@ -152,7 +159,10 @@ function write() {
             speedBps: r.speed_bps || null,
             adminStatus: deviceUp ? (OPER_STATUS[r.admin_status] || 'unknown') : 'unknown',
             operStatus: deviceUp ? (OPER_STATUS[r.oper_status] || 'unknown') : 'unknown',
-            sampledAt: s ? new Date(s.ts * 1000).toISOString() : null,
+            // v4: epoch SECONDS, not a 24-char ISO string. Nothing renders this
+            // to a human - it exists so consumers can judge freshness - and
+            // `new Date(sampledAt * 1000)` is one call away when they need to.
+            sampledAt: s ? s.ts : null,
             inBps: bps(deviceUp && s ? s.v0 : null),
             outBps: bps(deviceUp && s ? s.v1 : null),
             inErrorsPerSec: evt(deviceUp && s ? s.v2 : null),
@@ -181,7 +191,7 @@ function write() {
             host: r.device_name,
             display: fmt.display,
             value: fmt.value ?? null,
-            sampledAt: s ? new Date(s.ts * 1000).toISOString() : null
+            sampledAt: s ? s.ts : null          // v4: epoch seconds, as interfaces[]
         };
         if (fmt.unit) out.unit = fmt.unit;
         if (r.kind === 'cpu') out.status = cpuStatus(v0);
@@ -238,7 +248,7 @@ function write() {
     const maxDeviceInterval = db.prepare(
         'SELECT MAX(poll_interval_s) AS m FROM devices WHERE poll_interval_s IS NOT NULL').get().m || 0;
     const doc = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         generator: `snmpcanvas/${pkg.version}`,
         generatedAt: new Date().toISOString(),
         pollIntervalSec: Math.max(globalInterval, maxDeviceInterval),
