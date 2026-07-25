@@ -274,6 +274,69 @@ sqlite3 /path/to/snmpcanvas.db 'VACUUM;'
 current file size while it runs. It is not run automatically, because doing so
 unprompted on a large database would block for a long time.
 
+### The export file is rewritten whole, so put it on a RAM disk
+
+`snmp-status.json` is not appended to - every write regenerates the entire
+file, coalesced to at most one write per second. That keeps consumers simple
+(any web server can serve it, and you can `cat` it to debug), but it means the
+bytes written scale with the size of the file rather than with how much
+actually changed. Measured on a 400-device, 20,800-entity fleet with an 11MB
+export, it was **83-97% of everything the app wrote to disk** - several times
+the time-series database itself. Skipping unchanged writes would not help
+much: interface counters differ on essentially every poll, so the file is
+genuinely different nearly every time.
+
+At homelab sizes this is a non-issue (a 20-device board exports ~130KB and
+writes well under a gigabyte a day). It matters on **flash media at scale** -
+that same 11MB export is roughly 80GB of writes per day, which is real wear on
+a Raspberry Pi's SD card.
+
+The file is pure derived state, regenerated within seconds of a restart, so it
+does not need to survive a reboot. Point it at a RAM disk and the writes stop
+touching storage entirely. Measured effect: bytes reaching the card fell from
+69MB/min to 14MB/min, and what remains is the database - the part you do want
+durable. Size it at roughly **0.55KB per exported entity**.
+
+Running directly (Settings, or the `export_path` setting):
+
+```
+/dev/shm/snmp-status.json
+```
+
+Under Docker it needs a **named volume backed by tmpfs**, shared by whichever
+container serves the file. The `tmpfs:` service key does NOT work here - that
+gives each container its own private one, so the consumer would mount an empty
+directory and see nothing:
+
+```yaml
+services:
+  snmpcanvas:
+    volumes:
+      - status:/status
+  pingcanvas-web:
+    volumes:
+      - status:/usr/share/nginx/html/status:ro
+
+volumes:
+  status:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=64m
+```
+
+Then set the path once in **Settings** to `/status/snmp-status.json`; it is
+stored in the database, so it survives restarts and upgrades. There is
+deliberately no environment variable for it - the path has to agree with a
+mount that only the operator knows about.
+
+Size the volume for the export plus one temporary copy: the write goes to a
+temp file in the same directory and is renamed over the target, so the peak is
+about twice the file size. The 64m above is not a tight fit - at 0.55KB per
+entity it holds roughly **58,000 exported entities**, which is far more than a
+single instance can poll in the first place. This knob will not be what limits
+you.
+
 If the loop ever cannot keep up it says so - a warning in the log and on the
 Settings page - rather than silently recording history at a longer interval
 than the one configured.

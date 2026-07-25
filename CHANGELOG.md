@@ -13,6 +13,17 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **Docs: put `snmp-status.json` on a RAM disk.** Every write regenerates the
+  whole file (coalesced to at most one per second), so bytes written scale with
+  file size rather than with what changed. Measured on a 400-device /
+  20,800-entity fleet with an 11MB export: **83-97% of everything the app wrote
+  to disk**, several times the time-series database itself, or ~80GB/day - real
+  wear on a Pi's SD card. The file is pure derived state and regenerates within
+  seconds of a restart, so pointing `export_path` at tmpfs cut bytes reaching
+  the card from 69MB/min to 14MB/min. README documents both the direct
+  (`/dev/shm`) and Docker (named volume with `driver_opts: type: tmpfs`,
+  **not** the per-container `tmpfs:` key) forms. A non-issue at homelab sizes -
+  a 20-device board exports ~130KB.
 - **Docs: the nightly prune, and why the database file never shrinks.** Freed
   pages are kept inside the file and reused, so lowering retention reclaims no
   disk on its own and the file stays at its high-water mark - measured, a
