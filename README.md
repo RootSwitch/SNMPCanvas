@@ -233,6 +233,36 @@ many the machine has. A Pi 3B+ is therefore roughly a 400-500 device box at
 about 4% of a core). Disk is rarely the constraint: history runs roughly
 17MB per tracked entity per 90 days.
 
+**How fast your devices answer matters as much as how many there are.** The
+figures above were measured against agents replying in well under a
+millisecond - an estate made entirely of switches with real CPUs behind their
+SNMP agent. Real fleets are not that: a PDU is answering from a
+microcontroller, and a BMC is famously the slowest thing in the rack. Measured
+on one 100-device fleet, varying only how long agents took to reply:
+
+| slowest agent | samples/min | CPU | keeping up? |
+|---|---|---|---|
+| instant | 9,180 | 44% | yes |
+| 300ms | 7,400 | 45% | yes |
+| 1000ms | 3,560 | 46% | **no** |
+| 1000ms, `POLL_CONCURRENCY=64` | 9,280 | 64% | yes |
+
+Throughput fell 61% while **CPU never moved** - the loop was waiting, not
+working. Which is why the answer is not a bigger machine: raising
+`POLL_CONCURRENCY` restored full rate on the slow fleet, because a slot spends
+its time blocked on a socket rather than burning a core.
+
+So there is no single "how many devices" number, and anyone who gives you one
+is quoting their own gear. If Settings or the log says the poll loop is behind,
+raise `POLL_CONCURRENCY` until it stops - that warning exists so this is
+something you can watch rather than guess at.
+
+**Fewer, denser devices are cheaper.** At an equal entity count, 100 devices of
+~52 entities cost about **40% less CPU per entity** than 400 devices of ~12,
+because per-device overhead - session setup, the liveness GET, timeout handling
+- amortises across ports. A switch stack presenting as a single agent is
+materially cheaper to poll than the same switches standing alone.
+
 **Unreachable devices are the thing that actually costs you.** A device that
 answers occupies a slot for ~50ms; one that does not occupies it for a full
 timeout, ~10s - about 200x more. Two things keep that from hurting: at most

@@ -13,6 +13,16 @@
   p95 time-since-poll falling from 142s to 28s at under 1% CPU. Fleets larger
   than ~24 devices were affected; no configuration change is needed to pick
   up the fix.
+- **Docs: capacity depends on how fast your agents answer, not just how many.**
+  Every previously published figure was measured against agents replying in
+  under a millisecond. Re-measured on one 100-device fleet varying only reply
+  time: 9,180 samples/min instant, 7,400 at 300ms, **3,560 at 1000ms - a 61%
+  fall while CPU never moved from ~45%**, because the loop waits rather than
+  works. Raising `POLL_CONCURRENCY` to 64 restored full rate on the slow fleet
+  at 64% of one core, so slow agents raise the concurrency you need rather than
+  capping your capacity. Also measured: at equal entity count, fewer/denser
+  devices cost ~40% less CPU per entity than many small ones, so a switch stack
+  presenting as one agent is cheaper to poll than the same switches separately.
 - **snmp-status.json schema v4**: `device` on each interface is now the device
   NAME rather than a `{name, host, status}` object (a 48-port switch serialised
   the same host and status 48 times, while `devices[]` has listed all three
