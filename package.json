@@ -16,11 +16,12 @@
   "scripts": {
     "start": "node server/server.js",
     "mock-agent": "node tools/mock-agent.js",
-    "test": "node tools/check-export.js && node tools/check-history.js && node tools/check-concurrency.js && node tools/check-auth.js",
+    "test": "node tools/check-export.js && node tools/check-history.js && node tools/check-concurrency.js && node tools/check-auth.js && node tools/check-decode-crash.js",
     "check-export": "node tools/check-export.js",
     "check-history": "node tools/check-history.js",
     "check-concurrency": "node tools/check-concurrency.js",
-    "check-auth": "node tools/check-auth.js"
+    "check-auth": "node tools/check-auth.js",
+    "check-decode-crash": "node tools/check-decode-crash.js"
   },
   "engines": {
     "node": ">=20"

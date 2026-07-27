@@ -681,6 +681,58 @@ The field is **omitted entirely when false**, not emitted as `false`: on a
 large fleet a `"stale": false` on every row adds hundreds of KB to a file that
 is rewritten in full on every poll. Treat absence as "not stale".
 
+## Troubleshooting
+
+### A poll times out and nothing says why
+
+**A timeout can be masking a socket-level error**, and on a large fleet that is
+indistinguishable from a slow device.
+
+`net-snmp` 3.26.3 has a bug in its session error path:
+
+```js
+Session.prototype.onError = function (error) { this.emit (error); };
+```
+
+The Error object is passed as the *event name* instead of `emit("error",
+error)`. That handler is the only one registered for the session socket, so
+every socket-level failure is emitted under a nonsense event name and vanishes:
+`session.on('error', ...)` can never see it, and because it is not an `'error'`
+event it does not throw either. It silently does nothing, and the request that
+was in flight simply runs out its five-second timeout.
+
+Failures that disappear this way include:
+
+* `EACCES` binding a privileged source port
+* `EHOSTUNREACH` or `ENETUNREACH` reported back by an ICMP error
+* `EMFILE` when the poller runs out of file descriptors
+
+**Nothing in SNMPCanvas can recover these** - the event is unobservable to any
+caller - so the practical advice is diagnostic. If timeouts appear across *many
+hosts at once*, suspect a socket-level cause rather than the devices, and check
+descriptor limits first (`ulimit -n`, or the container's `LimitNOFILE`).
+Descriptor exhaustion is the one that scales with fleet size and therefore the
+one most likely to look like "the network got slow".
+
+A one-line fix upstream would surface all of them.
+
+### A device sends responses that cannot be decoded
+
+Logged as `[snmp] session error from <host>`, rate limited to one line per host
+per 30 seconds. That poll fails; everything else keeps running.
+
+Usually a firmware bug, or a v3 key or protocol mismatch producing a response
+that fails to authenticate rather than a clean error. Reproduce the handling
+locally with:
+
+```
+MOCK_GARBAGE=1 MOCK_PORT=16199 node tools/mock-agent.js
+```
+
+Before this was guarded, one such response terminated the whole process. See
+`tools/check-decode-crash.js`, which asserts both that an unguarded session dies
+and that a guarded one survives.
+
 ## Development
 
 ```

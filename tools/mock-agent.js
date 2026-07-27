@@ -32,6 +32,40 @@ const PORT = parseInt(process.env.MOCK_PORT || '16100', 10);
 const OT = snmp.ObjectType;
 const RO = snmp.MaxAccess['read-only'];
 
+// MOCK_GARBAGE=1: not an agent at all, but a device that answers with bytes no
+// SNMP library can decode.
+//
+// The second kind of thing a device controls. MOCK_EVIL covers the STRINGS it
+// sends; this covers the PACKET it sends, which is the input SNMPCanvas is
+// least able to refuse. net-snmp's Session emits 'error' when a response fails
+// to decode (3.26.3, index.js:2417), and in Node an 'error' event with no
+// registered listener is THROWN - so before server/snmp.js guarded its
+// sessions, one of these datagrams killed the whole single-process
+// application: poller, API and UI together.
+//
+// Reachable by any misbehaving device, or by anything that can land a datagram
+// on the session's source port. A firmware bug is enough; malice is optional.
+//
+// Used by tools/check-decode-crash.js. Run it by hand with:
+//   MOCK_GARBAGE=1 MOCK_PORT=16199 node tools/mock-agent.js
+if (process.env.MOCK_GARBAGE === '1') {
+    const dgram = require('node:dgram');
+    const sock = dgram.createSocket('udp4');
+    // The mock needs its own listener for exactly the reason the fix exists.
+    sock.on('error', (err) => { console.error('mock-agent(garbage) socket error:', err.message); });
+    sock.on('message', (msg, rinfo) => {
+        // A BER SEQUENCE header declaring a 0x7fff-byte body and then supplying
+        // three bytes. Well formed enough to be parsed as SNMP rather than
+        // discarded as noise, and impossible to finish parsing.
+        const junk = Buffer.from([0x30, 0x82, 0x7f, 0xff, 0x02, 0x01, 0x00]);
+        sock.send(junk, rinfo.port, rinfo.address);
+    });
+    sock.bind(PORT, () => {
+        console.log(`mock-agent GARBAGE mode on udp/${PORT} - every request gets an undecodable reply`);
+    });
+    return;
+}
+
 // net-snmp encodes Counter64 from an 8-byte Buffer, not a Number/BigInt.
 function c64(big) {
     const buf = Buffer.alloc(8);

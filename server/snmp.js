@@ -31,6 +31,52 @@ const LEVELS = {
     authPriv:     snmp.SecurityLevel.authPriv
 };
 
+const log = (...args) => console.log(new Date().toISOString(), '[snmp]', ...args);
+
+// A device that sends undecodable responses will send more than one, so the
+// log is rate limited per host rather than per packet.
+const lastDecodeErrLog = new Map();
+const DECODE_ERR_QUIET_MS = 30000;
+
+/**
+ * Attach the 'error' listener that keeps one bad packet from killing the app.
+ *
+ * WHY THIS EXISTS. net-snmp's Session extends EventEmitter and emits 'error'
+ * from onMsg when a response cannot be decoded (3.26.3, index.js:2417, inside
+ * the Message.createFromBuffer catch). In Node an 'error' event with NO
+ * registered listener is THROWN, not dropped - that is a language rule, not a
+ * library quirk - so it became an uncaught exception.
+ *
+ * SNMPCanvas is a single process. The poller, the API and the web UI share it,
+ * so this was not a degraded poll: one undecodable response took the whole
+ * application down, and the trigger is any misbehaving device it polls or
+ * anything able to land a malformed UDP datagram on the session's source port.
+ * For a tool whose job is talking to equipment it does not control, that is
+ * reachable in normal operation rather than only under attack.
+ *
+ * The listener degrades the failure to what it should always have been: this
+ * one request fails on its own timeout, the session is closed by its caller,
+ * and every other poll continues. The host is named because a device emitting
+ * undecodable responses is worth knowing about in its own right - it is usually
+ * a firmware bug or a mismatched v3 configuration.
+ *
+ * NOT A CATCH-ALL. A separate net-snmp bug means socket-level errors never
+ * reach here at all; see the note below createSession.
+ */
+function guard(session, host) {
+    session.on('error', (err) => {
+        const now = Date.now();
+        const last = lastDecodeErrLog.get(host) || 0;
+        if (now - last > DECODE_ERR_QUIET_MS) {
+            lastDecodeErrLog.set(host, now);
+            log(`session error from ${host}: ${err && err.message ? err.message : err}`
+                + ` (this poll fails; further session errors from this host are quiet for`
+                + ` ${DECODE_ERR_QUIET_MS / 1000}s)`);
+        }
+    });
+    return session;
+}
+
 // target: { host, port, version: '2c'|'3', creds: { community } |
 //          { v3_user, v3_level, v3_auth_proto, v3_auth_key, v3_priv_proto, v3_priv_key } }
 function createSession(target) {
@@ -54,10 +100,40 @@ function createSession(target) {
             user.privProtocol = PRIV_PROTOS[c.v3_priv_proto] || snmp.PrivProtocols.aes;
             user.privKey = c.v3_priv_key || '';
         }
-        return snmp.createV3Session(target.host, user, options);
+        // BOTH return paths are guarded. v3 is the one more likely to receive
+        // something it cannot decode, because a key or protocol mismatch
+        // produces a response that fails to authenticate rather than a clean
+        // error - so guarding only the v2c path would have left the likelier
+        // trigger open.
+        return guard(snmp.createV3Session(target.host, user, options), target.host);
     }
-    return snmp.createSession(target.host, target.creds.community || 'public', options);
+    return guard(
+        snmp.createSession(target.host, target.creds.community || 'public', options),
+        target.host
+    );
 }
+
+// A SECOND net-snmp BUG, WHICH NOTHING HERE CAN FIX, recorded so that a
+// mystifying symptom has a written cause.
+//
+//     Session.prototype.onError = function (error) { this.emit (error); };
+//
+// (3.26.3, index.js:2409.) The Error object is passed as the EVENT NAME
+// instead of emit("error", error). That handler is the only one registered for
+// the session socket (index.js:2094), so every dgram-level failure - EACCES on
+// a privileged source port, EHOSTUNREACH or ENETUNREACH from an ICMP error,
+// EMFILE when the poller runs out of descriptors - is emitted under a nonsense
+// event name and vanishes. The guard above cannot see them, because they are
+// not 'error' events; and for the same reason they do not throw either. They
+// silently do nothing.
+//
+// The symptom is a poll that degrades to a bare timeout with no stated cause,
+// which on a large fleet is indistinguishable from a slow device. If timeouts
+// appear across many hosts at once, suspect a socket-level cause - descriptor
+// exhaustion above all - rather than the devices.
+//
+// One line upstream fixes it. Until then there is no workaround here, which is
+// why this is a comment and a docs entry rather than code.
 
 // Coerce a varbind value to a JS value. Counter64 arrives as a raw Buffer.
 function coerce(vb) {
