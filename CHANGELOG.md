@@ -2,6 +2,16 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Passwords hash and verify off the event loop.** `crypto.scryptSync` in
+  `server/auth.js` serialised concurrent logins into one unbroken stall (8 at
+  once measured ~218ms in which nothing polls - the loop this froze is also
+  the poll loop), while each single call sat under per-call blocking
+  thresholds - the burst is the cost, so a blocking sweep cannot see it. Now
+  the async `crypto.scrypt`, awaited in the setup, login and password-change
+  handlers; the server waits for the `ADMIN_PASSWORD` seed before listening.
+  The stored hash format is unchanged - `tools/check-auth.js` (new, in
+  `npm test`) proves a hash minted by the old synchronous code still verifies.
+
 - **Tests for the things that broke.** `npm test` now runs three checks that
   live in the repo instead of in somebody's scratch directory:
   `tools/check-export.js` asserts the snmp-status.json contract PingCanvas and
