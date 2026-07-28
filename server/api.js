@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { db, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode, DATA_DIR } = require('./db');
 const auth = require('./auth');
+const themeFile = require('./theme');
 const discover = require('./discover');
 const poller = require('./poller');
 const exporter = require('./exporter');
@@ -148,6 +149,22 @@ let backupInFlight = false;
 
 const routes = [
     { method: 'GET', path: /^\/api\/health$/, authRequired: false, handler: (req, res) => ok(res, { ok: true, version: require('../package.json').version }) },
+
+    // The operator's own palette from <data>/theme.json, if they wrote one.
+    // PUBLIC on purpose: the login page is themed too, and gating this would
+    // leave the one page every user sees first stuck on Classic. It carries
+    // fifteen colours and a label - nothing not already visible on the page.
+    // Read per request, so editing the file in the mounted volume takes effect
+    // on refresh, which is the whole point of it living outside the image.
+    { method: 'GET', path: /^\/api\/theme$/, authRequired: false, handler: (req, res) => {
+        const r = themeFile.loadTheme(DATA_DIR);
+        if (r.errors.length) {
+            // A broken file must not silently fall back - that reads as "my
+            // edit did nothing" and sends people editing it again.
+            console.error(new Date().toISOString(), '[theme] ignoring', r.path + ':', r.errors.join('; '));
+        }
+        ok(res, { theme: r.theme, warnings: r.warnings, errors: r.errors });
+    } },
 
     { method: 'GET', path: /^\/api\/session$/, authRequired: false, handler: (req, res) => {
         const authed = auth.authenticate(req);

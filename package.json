@@ -1,33 +1,33 @@
 {
-  "name": "snmpcanvas",
-  "version": "1.0.0",
-  "description": "Lightweight self-hosted SNMP monitoring: poll SNMPv2c/v3 devices, store history in SQLite, view it in a dependency-light web UI.",
-  "license": "Unlicense",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/RootSwitch/SNMPCanvas.git"
-  },
-  "homepage": "https://github.com/RootSwitch/SNMPCanvas",
-  "bugs": {
-    "url": "https://github.com/RootSwitch/SNMPCanvas/issues"
-  },
-  "type": "commonjs",
-  "main": "server/server.js",
-  "scripts": {
-    "start": "node server/server.js",
-    "mock-agent": "node tools/mock-agent.js",
-    "test": "node tools/check-export.js && node tools/check-history.js && node tools/check-concurrency.js && node tools/check-auth.js && node tools/check-decode-crash.js",
-    "check-export": "node tools/check-export.js",
-    "check-history": "node tools/check-history.js",
-    "check-concurrency": "node tools/check-concurrency.js",
-    "check-auth": "node tools/check-auth.js",
-    "check-decode-crash": "node tools/check-decode-crash.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "better-sqlite3": "^12.2.0",
-    "net-snmp": "^3.20.0"
-  }
+    "name": "snmpcanvas",
+    "version": "1.0.0",
+    "description": "Lightweight self-hosted SNMP monitoring: poll SNMPv2c/v3 devices, store history in SQLite, view it in a dependency-light web UI.",
+    "license": "Unlicense",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/RootSwitch/SNMPCanvas.git"
+    },
+    "homepage": "https://github.com/RootSwitch/SNMPCanvas",
+    "bugs": {
+        "url": "https://github.com/RootSwitch/SNMPCanvas/issues"
+    },
+    "type": "commonjs",
+    "main": "server/server.js",
+    "scripts": {
+        "start": "node server/server.js",
+        "mock-agent": "node tools/mock-agent.js",
+        "test": "node tools/check-export.js && node tools/check-history.js && node tools/check-concurrency.js && node tools/check-auth.js && node tools/check-decode-crash.js && node tools/test-theme.js",
+        "check-export": "node tools/check-export.js",
+        "check-history": "node tools/check-history.js",
+        "check-concurrency": "node tools/check-concurrency.js",
+        "check-auth": "node tools/check-auth.js",
+        "check-decode-crash": "node tools/check-decode-crash.js"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "dependencies": {
+        "better-sqlite3": "^12.2.0",
+        "net-snmp": "^3.20.0"
+    }
 }

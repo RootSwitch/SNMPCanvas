@@ -2,6 +2,33 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Bring your own theme, without a rebuild.** A `theme.json` in the data
+  directory adds a thirtieth entry to the picker, above the twenty-nine shipped
+  ones. Same fifteen `--se-*` variables, hex only, and partial files are fine -
+  anything left out inherits Classic, so changing two colours takes a two-line
+  file. Because the data directory is a bind mount, editing it is a browser
+  refresh rather than a rebuild; delete the file and the entry goes away. Point
+  several apps at one shared data directory and a single file themes all of them.
+
+  The shipped themes were deliberately left alone: they are duplicated across
+  six repos, the style guide and the demo, so every addition is drift - which is
+  exactly why a user's palette should not join that set. `tools/export-theme.js`
+  prints any shipped theme as a starting file so nobody has to learn the format
+  from documentation.
+
+  `tools/check-theme.js` validates a file before you restart anything, and calls
+  the same loader the server calls, so it cannot accept what the app would
+  reject. It also audits readability: text contrast against WCAG AA, plus hue
+  separation and saturation on `--se-up`/`--se-down`/`--se-warn`, because a
+  palette where healthy and failed do not separate at a glance is a different
+  problem from one that is merely ugly. It reports and never refuses.
+
+  The endpoint serving it is deliberately public. The login page is themed too,
+  and gating this would leave the first page every user sees stuck on Classic
+  while their palette waited behind a session. The loader rebuilds the theme
+  from validated values rather than passing the file through, so unknown keys
+  and non-hex values never reach a browser.
+
 - **The container healthcheck no longer leaks zombies onto the host.** The
   image runs `node` as PID 1, and Node does not reap processes it did not
   spawn - so the HEALTHCHECK's `wget` left an `ssl_client` behind on every
