@@ -29,8 +29,15 @@ function check(name, pass, detail) {
 
 // --- fixture ----------------------------------------------------------------
 const now = Math.floor(Date.now() / 1000);
-db.prepare(`INSERT INTO devices (id, name, host, snmp_version, status, last_seen_ts, created_ts)
-            VALUES (1, 'core-sw1', '10.0.0.2', '2c', 'up', ?, ?)`).run(now, now);
+// export_uptime = 1 so the device-uptime metric is actually in the feed. Without
+// it the uptime block never runs, and every assertion about metrics[] below is
+// blind to the one entry that is built by hand rather than mapped - which is
+// exactly how an ISO sampledAt survived there through the whole v4 migration.
+// uptime_code is set explicitly: db.js backfills codes at require time, which is
+// before this fixture inserts anything.
+db.prepare(`INSERT INTO devices (id, name, host, snmp_version, status, last_seen_ts, created_ts,
+                                 export_uptime, uptime_code, last_sysuptime_cs)
+            VALUES (1, 'core-sw1', '10.0.0.2', '2c', 'up', ?, ?, 1, 'U7TM', 4320000)`).run(now, now);
 db.prepare(`INSERT INTO entities (id, device_id, kind, snmp_index, name, alias, speed_bps, export, code, admin_status, oper_status, stale)
             VALUES (1, 1, 'if', '1', 'Gi0/1', 'uplink to fw', 1000000000, 1, 'K7Q2', 1, 1, 0)`).run();
 // A second interface that has gone STALE - the flag exists so a consumer can
@@ -68,7 +75,18 @@ check('schemaVersion is 4', doc.schemaVersion === 4, String(doc.schemaVersion));
 check('device is a plain string, not an object', typeof one.device === 'string', JSON.stringify(one.device));
 check('the per-interface id field is gone', !('id' in one));
 check('sampledAt is epoch seconds', typeof one.sampledAt === 'number' && one.sampledAt > 1e9, String(one.sampledAt));
-check('metrics carry epoch sampledAt too', mets.length > 0 && typeof mets[0].sampledAt === 'number', String(mets[0] && mets[0].sampledAt));
+// EVERY metric, not mets[0]. Device-uptime rows are pushed AFTER the mapped ones,
+// so an index-0 check structurally cannot reach them, and null is legitimate (no
+// sample yet) - so the check also requires at least one real epoch value or it
+// could pass on a feed where nothing was ever stamped.
+const badTs = mets.filter((m) => m.sampledAt !== null && typeof m.sampledAt !== 'number');
+const someTs = mets.some((m) => typeof m.sampledAt === 'number' && m.sampledAt > 1e9);
+check('EVERY metric carries epoch sampledAt or null', mets.length > 0 && badTs.length === 0 && someTs,
+    badTs.length
+        ? `${badTs.length} non-numeric, first: ${badTs[0].kind} ${JSON.stringify(badTs[0].sampledAt)}`
+        : (someTs ? `${mets.length} checked` : 'none carried a real epoch value'));
+check('the device-uptime metric is in the feed', mets.some((m) => m.kind === 'uptime'),
+    JSON.stringify(mets.map((m) => m.kind)));
 check('devices[] still carries host and status', !!(doc.devices || [])[0]?.host, JSON.stringify((doc.devices || [])[0]));
 check('poller health is published', !!doc.poller && doc.poller.behind === false, JSON.stringify(doc.poller));
 

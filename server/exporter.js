@@ -227,7 +227,13 @@ function write() {
             display: up ? fmtUptime(sec) : '--',
             value: sec,
             unit: 's',
-            sampledAt: d.last_seen_ts ? new Date(d.last_seen_ts * 1000).toISOString() : null
+            // v4 epoch seconds, same as interfaces[] and every mapped metric
+            // above. This block was missed by the v4 migration and kept emitting
+            // an ISO string, so two entries in the same metrics[] array carried
+            // different types in one field. Nothing read sampledAt, which is why
+            // it survived - a consumer that started would have got NaN from
+            // sampledAt * 1000 on uptime rows only.
+            sampledAt: d.last_seen_ts ? d.last_seen_ts : null
         });
     }
 

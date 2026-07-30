@@ -2,6 +2,24 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Device-uptime metrics carry `sampledAt` as epoch seconds, like everything else
+  in the feed.** Schema v4 moved every `sampledAt` from an ISO string to epoch
+  seconds, but the device-uptime entry is built by hand rather than mapped from a
+  sample row, and it was missed - so two entries in the same `metrics[]` array
+  carried different types in one field. Nothing reads `sampledAt`, which is exactly
+  how it survived the whole migration: a consumer that later started reading it
+  would have got `NaN` from `sampledAt * 1000` on uptime rows alone, and found out
+  months afterwards on one tile.
+
+  `tools/check-export.js` could not have caught this, for two independent reasons
+  worth recording. It asserted the type on `metrics[0]` only, and uptime rows are
+  pushed after the mapped ones, so an index-0 check structurally cannot reach them.
+  And the fixture exported no uptime metric, so there was nothing to reach in the
+  first place. It now exports one and checks EVERY metric, requiring at least one
+  real epoch value so the check cannot pass on a feed where nothing was ever
+  stamped. Confirmed by planting the old behaviour back and watching it fail by
+  name.
+
 - **Bring your own theme, without a rebuild.** A `theme.json` in the data
   directory adds a thirtieth entry to the picker, above the twenty-nine shipped
   ones. Same fifteen `--se-*` variables, hex only, and partial files are fine -
