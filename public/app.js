@@ -215,12 +215,51 @@
     }
 
     // ===== devices list =====
+    // Sort key for the Address column.
+    //
+    // A raw string compare puts 192.168.1.10 before 192.168.1.9, and .100
+    // before .11 - wrong anywhere, and particularly bad in a tool whose whole
+    // job is looking at addresses. Zero-padding each IPv4 octet to three digits
+    // makes lexicographic order IS numeric order, with no special comparator.
+    //
+    // IPv6 gets the same treatment: expand :: and pad each group to four hex
+    // digits, so 2001:db8::7 and 2001:0db8:0000:...:0007 sort as the same
+    // value rather than by how they happened to be typed.
+    //
+    // The band prefix keeps the three kinds in stable groups - v4, then v6,
+    // then hostnames - instead of interleaving hex digits with letters. A host
+    // field accepts a name as readily as an address, so mixed lists are normal.
+    function expandIPv6(s) {
+        const t = s.replace(/^\[/, '').replace(/\]$/, '');
+        if (!/^[0-9a-fA-F:]+$/.test(t) || (t.match(/::/g) || []).length > 1) return null;
+        const halves = t.split('::');
+        const head = halves[0] ? halves[0].split(':') : [];
+        const tail = halves.length === 2 ? (halves[1] ? halves[1].split(':') : []) : [];
+        if (head.concat(tail).some((g) => g === '' || g.length > 4)) return null;
+        const fill = 8 - head.length - tail.length;
+        if (halves.length === 2 ? fill < 0 : fill !== 0) return null;
+        const groups = head.concat(new Array(halves.length === 2 ? fill : 0).fill('0'), tail);
+        return groups.map((g) => g.padStart(4, '0').toLowerCase()).join('');
+    }
+    function hostSortKey(h) {
+        const s = String(h == null ? '' : h).trim();
+        const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+        if (v4 && v4.slice(1, 5).every((o) => Number(o) <= 255)) {
+            return '1' + v4.slice(1, 5).map((o) => String(Number(o)).padStart(3, '0')).join('');
+        }
+        if (s.indexOf(':') >= 0) {
+            const v6 = expandIPv6(s);
+            if (v6) return '2' + v6;
+        }
+        return '3' + s.toLowerCase();
+    }
+
     // Sort state survives the 30s auto-refresh (module scope, not persisted).
     let deviceSort = { key: 'name', dir: 1 };
     const SORT_VALUE = {
         status: (d) => d.status + (d.enabled ? '' : 'z'),
         name: (d) => d.name.toLowerCase(),
-        host: (d) => d.host,
+        host: (d) => hostSortKey(d.host),
         cpu: (d) => d.cpuPct ?? -1,
         topbw: (d) => (d.topIf && d.topIf.bps != null) ? d.topIf.bps : -1,
         ifcount: (d) => d.interfaceCount,
