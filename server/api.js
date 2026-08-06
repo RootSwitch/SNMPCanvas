@@ -621,6 +621,7 @@ const routes = [
             pollConcurrency: poller.health().concurrency,
             retentionDays: parseInt(getSetting('retention_days'), 10),
             exportPath: getSetting('export_path'),
+            exportWallPath: getSetting('export_wall_path'),
             exportError: exporter.getLastError(),
             dataDir: DATA_DIR,
             credentialEncryption: !!process.env.SNMPCANVAS_SECRET,
@@ -655,6 +656,15 @@ const routes = [
             const err = exportPathError(v);
             if (err) return bad(res, err);
             setSetting('export_path', v);
+            exporter.scheduleWrite();
+        }
+        if (body.exportWallPath !== undefined) {
+            const v = String(body.exportWallPath).trim();
+            if (v.toLowerCase() !== 'off') {           // 'off' disables the wall copy
+                const err = exportPathError(v);
+                if (err) return bad(res, err);
+            }
+            setSetting('export_wall_path', v);
             exporter.scheduleWrite();
         }
         ok(res);

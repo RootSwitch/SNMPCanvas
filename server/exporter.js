@@ -288,6 +288,34 @@ function write() {
     // file directly is using `jq .` or a browser, neither of which cares.
     fs.writeFileSync(tmp, JSON.stringify(doc));
     fs.renameSync(tmp, target);
+
+    // --- the wall variant: codes and values, nothing that names anything ---
+    // The full feed above is a roster of every monitored device - sysName,
+    // host address, interface names, aliases - including devices not drawn on
+    // any board. A kiosk wall serves its feed unauthenticated by design, so
+    // it gets this stripped copy instead: the {code} tokens a board binds by
+    // are opaque minted aliases, and code -> value is all the kiosk consumes
+    // (device/name/alias index keys simply never bind - annotations written
+    // against "Device:ifName" need the full file, or better, the {code}).
+    // devices[] is dropped whole: it exists so consumers can attribute ports
+    // to boxes, which is exactly the join a wall must not hand out. Metric
+    // display strings stay - they ARE what the wall renders.
+    const wallTarget = String(getSetting('export_wall_path') || '').trim();
+    if (wallTarget && wallTarget.toLowerCase() !== 'off') {
+        const wall = {
+            schemaVersion: doc.schemaVersion,
+            generator: doc.generator,
+            generatedAt: doc.generatedAt,
+            pollIntervalSec: doc.pollIntervalSec,
+            poller: doc.poller,          // aggregate loop health, names nothing
+            wallSanitized: true,
+            interfaces: interfaces.map(({ device, name, alias, ifIndex, ...rest }) => rest),
+            metrics: metrics.map(({ host, ...rest }) => rest)
+        };
+        const wtmp = path.join(path.dirname(wallTarget), `.${path.basename(wallTarget)}.tmp`);
+        fs.writeFileSync(wtmp, JSON.stringify(wall));
+        fs.renameSync(wtmp, wallTarget);
+    }
 }
 
 function getLastError() { return lastError; }

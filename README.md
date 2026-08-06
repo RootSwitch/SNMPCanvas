@@ -540,6 +540,17 @@ label line or a connection annotation. Braces are required on labels and
 optional on annotations, so the braced form always works; text around the
 token is the board author's own (`Rx {K7Q2}` renders as `Rx ▼56M ▲32M`).
 
+**The wall copy.** The full file is a complete inventory - sysNames, host
+addresses, interface names and aliases, for every monitored device whether or
+not it is drawn anywhere - and a kiosk wall serves its feed unauthenticated
+by design. So a second file, `snmp-status.wall.json`, is written beside it
+(path in **Settings**, `off` to disable): the same interfaces and metrics
+stripped to codes and values, with `devices[]` dropped entirely. `{code}`
+bindings resolve identically against either file; only annotations keyed by
+`Device:ifName` or `Device:alias` need the full one. Serve the wall copy,
+keep the full feed where only AlertCanvas's file mount can read it - the
+suite's setup script wires exactly that.
+
 `interfaces[]` in schema v4 (shown indented here for reading - the real file is
 **minified**, since it is rewritten in full on every poll and indentation was
 31% of it; pipe it through `jq .` to inspect one by eye):

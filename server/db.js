@@ -266,7 +266,13 @@ const DEFAULTS = {
     poll_interval_s: '30',
     poll_concurrency: '16',
     retention_days: '90',
-    export_path: path.join(DATA_DIR, 'snmp-status.json')
+    // Env overrides are deploy-time defaults, not owners: a value saved in
+    // Settings wins. The suite's setup script uses SNMPCANVAS_EXPORT to move
+    // the full feed into the unserved .private directory; the wall variant
+    // (codes + values, no device names/hosts) defaults to a sibling of the
+    // data dir so a served copy exists on every layout. 'off' disables it.
+    export_path: process.env.SNMPCANVAS_EXPORT || path.join(DATA_DIR, 'snmp-status.json'),
+    export_wall_path: process.env.SNMPCANVAS_WALL_EXPORT || path.join(DATA_DIR, 'snmp-status.wall.json')
 };
 
 function getSetting(key) {

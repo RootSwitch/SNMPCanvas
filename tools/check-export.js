@@ -107,6 +107,41 @@ check('fractional error rates survive rounding', one.inErrorsPerSec > 0 && !Numb
 
 check('written minified (no pretty-print padding)', !/\n\s\s/.test(raw), `${raw.length} bytes`);
 
+// --- the wall variant (codes + values, nothing that names anything) ---------
+// Written by default beside the full file; a kiosk serves THIS one
+// unauthenticated, so the contract is as much about what is ABSENT as what
+// is present. The raw string scan is the real check: a field rename could
+// smuggle a hostname past any per-key assertion, but not past the bytes.
+const wallRaw = fs.readFileSync(path.join(TMP, 'snmp-status.wall.json'), 'utf8');
+const wallDoc = JSON.parse(wallRaw);
+const wifs = wallDoc.interfaces || [];
+const wone = wifs.find((i) => i.code === 'K7Q2') || {};
+
+check('wall: written by default, marked wallSanitized', wallDoc.wallSanitized === true);
+check('wall: devices[] is gone entirely', !('devices' in wallDoc));
+check('wall: every binding code survives',
+    ['K7Q2', 'M4XB'].every((c) => wifs.some((i) => i.code === c)) &&
+    ['P9RT', 'U7TM'].every((c) => (wallDoc.metrics || []).some((m) => m.code === c)));
+check('wall: interface numerics survive (bps, errors, operStatus)',
+    wone.inBps === 12345679 && wone.inErrorsPerSec > 0 && wone.operStatus === 'up',
+    JSON.stringify({ inBps: wone.inBps, err: wone.inErrorsPerSec, oper: wone.operStatus }));
+check('wall: cpu metric keeps kind, display, and status',
+    (wallDoc.metrics || []).some((m) => m.code === 'P9RT' && m.kind === 'cpu' && m.status && /CPU/.test(m.display)));
+check('wall: staleness plumbing intact (generatedAt, pollIntervalSec, poller)',
+    !!wallDoc.generatedAt && wallDoc.pollIntervalSec > 0 && !!wallDoc.poller);
+const leaked = ['core-sw1', '10.0.0.2', 'Gi0/1', 'Gi0/2', 'uplink to fw']
+    .filter((v) => wallRaw.includes(v));
+check('wall: NO identifying string from the fixture appears in the bytes',
+    leaked.length === 0, leaked.length ? 'LEAKED: ' + leaked.join(', ') : 'device name, host, ifNames, alias all absent');
+
+// 'off' disables the wall copy - and must not touch an existing file's bytes
+// (a serving kiosk keeps the last copy rather than getting a half-truth).
+fs.rmSync(path.join(TMP, 'snmp-status.wall.json'));
+setSetting('export_wall_path', 'off');
+exporter.write();
+check("wall: 'off' writes no wall file", !fs.existsSync(path.join(TMP, 'snmp-status.wall.json')));
+check("wall: 'off' still writes the full export", fs.existsSync(path.join(TMP, 'snmp-status.json')));
+
 // The three keys a board annotation can bind to. If any stops being derivable
 // the kiosk silently shows nothing for that port.
 check('short code is exported', one.code === 'K7Q2', one.code);

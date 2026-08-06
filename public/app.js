@@ -1254,6 +1254,7 @@
                 for external dashboards to ingest.</div>
             <div class="form-grid">
                 <label>snmp-status.json path</label><input type="text" id="s-export" value="${esc(s.exportPath)}">
+                <label title="A stripped copy for unauthenticated dashboards: {code} keys and values only - no device names, addresses, or interface names. Safe to serve where the full file is not. 'off' disables it.">wall copy path</label><input type="text" id="s-export-wall" value="${esc(s.exportWallPath)}">
             </div>
             ${s.exportError ? `<div class="error-text" style="margin-top:8px">Last write failed: ${esc(s.exportError)}</div>` : ''}
         </div>
@@ -1305,6 +1306,7 @@
                     pollIntervalS: parseInt(document.getElementById('s-interval').value, 10),
                     retentionDays: parseInt(document.getElementById('s-retention').value, 10),
                     exportPath: document.getElementById('s-export').value,
+                    exportWallPath: document.getElementById('s-export-wall').value,
                     // Omitted when the environment owns it: sending a value the
                     // server must refuse would fail the whole save over a field
                     // the operator cannot even edit.
