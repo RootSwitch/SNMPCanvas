@@ -103,10 +103,10 @@ bigger, the license makes forking genuinely easy.
 
 > **Installed via the [canvas-suite](https://github.com/RootSwitch/canvas-suite)
 > script?** Skip this section - your data already lives under
-> `/srv/noc-data`, the override file and secrets (SNMPCANVAS_SECRET,
+> `/srv/canvas-suite`, the override file and secrets (SNMPCANVAS_SECRET,
 > SUITE_SECRET) are already written, and the app is running. Sign in through LaunchCanvas
 > (the setup script prints its admin password once, and stores it in
-> `/projects/launchcanvas/docker-compose.override.yml`); this app has no
+> `/opt/canvas-suite/launchcanvas/docker-compose.override.yml`); this app has no
 > login of its own until you set an optional fallback password in Settings.
 > **On Windows?** Skip the `chown` steps (Docker Desktop handles ownership);
 > set env vars PowerShell-style (`$env:NAME = 'value'; npm start`); and
@@ -157,9 +157,9 @@ server detects the pair at startup and switches to HTTPS on the same port
 Place your own PEM pair at those two paths (or point `TLS_CERT`/`TLS_KEY`
 elsewhere) - nothing else changes. Delete the files to fall back to HTTP.
 
-If you mount a different host directory at `/data` (say `/srv/noc-data`),
+If you mount a different host directory at `/data` (say `/srv/canvas-suite`),
 the certs belong in *that* directory's `certs/` subfolder - tell the script
-with `CERT_DIR=/srv/noc-data/certs ./tools/gen-cert.sh ...`. And if HTTPS
+with `CERT_DIR=/srv/canvas-suite/certs ./tools/gen-cert.sh ...`. And if HTTPS
 doesn't come up after a restart, the server stayed on HTTP because it
 couldn't use the cert - `docker compose logs snmpcanvas | grep -i tls` names
 the cause, which is almost always one of two things: the pair isn't at
@@ -178,7 +178,7 @@ your edits:
 services:
   snmpcanvas:
     volumes:
-      - /srv/noc-data:/data:z        # replaces ./data (same container path)
+      - /srv/canvas-suite:/data:z        # replaces ./data (same container path)
     environment:
       - TZ=America/Chicago
 ```
