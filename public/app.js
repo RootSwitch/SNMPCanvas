@@ -362,6 +362,7 @@
 
     async function renderDevices() {
         setNav('devices', true);
+        $main.dataset.view = 'devices';
         const { devices } = await GET('/api/devices');
         const val = SORT_VALUE[deviceSort.key] || SORT_VALUE.name;
         devices.sort((a, b) => {
@@ -800,6 +801,7 @@
     let ifFilter = ''; // interface filter text, kept across auto-refresh
 
     async function renderDevice(id) {
+        $main.dataset.view = 'device';
         setNav('devices', true);
         let data;
         try {
@@ -1164,6 +1166,9 @@
 
     async function renderEntity(deviceId, entityId, rangeSec) {
         setNav('devices', true);
+        // Graphs are capped even in wide layout: the chart carries a fixed
+        // point budget, so full-bleed width is a Mega Graph, not more data.
+        $main.dataset.view = 'entity';
         rangeSec = rangeSec || 86400;
         const to = Math.floor(Date.now() / 1000);
         const from = to - rangeSec;

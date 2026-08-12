@@ -107,6 +107,10 @@ a:hover { text-decoration: underline; }
    The centered 1100px column stays the default - it is the product's
    homelab identity - wide is the opt-in for many columns on big screens. */
 body.wide #main { max-width: none; padding-left: 28px; padding-right: 28px; }
+/* Graph pages stay capped even in wide layout: charts carry a fixed point
+   budget, so full-bleed width just stretches them into a Mega Graph.
+   Tables gain columns from width; charts gain nothing. */
+body.wide #main[data-view="entity"] { max-width: 1100px; margin: 0 auto; }
 
 .panel {
     background: var(--se-panel);
