@@ -2,6 +2,15 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Visible, adjustable auto-refresh - and refreshing stops stealing your
+  scroll.** The device list (and device detail page) refresh interval is
+  now a dropdown in the page head: 30s (the previous, undocumented
+  behavior, still the default), 1m, 5m, or off - a per-browser preference.
+  Two behaviors fixed alongside: a refresh now preserves your horizontal
+  and vertical scroll position, so reading the far columns of a wide table
+  no longer snaps you back to the left edge every 30 seconds, and a
+  refresh never fires while the Columns panel is open mid-choice.
+
 - **Device identity: OS, Hardware, Cores and RAM columns.** Discovery (and
   Rediscover) now collect a device's static identity: a per-family OS
   summary distilled from the agent's own description ("Linux 6.17.2-1-pve

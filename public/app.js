@@ -367,6 +367,18 @@
         return DEFAULT_COLS.slice();
     }
 
+    // Auto-refresh interval: a per-browser preference. 30s is the
+    // historical behavior and the default; Off is for reading a wide table
+    // in peace. The devices and device-detail pages both honor it.
+    const REFRESH_CHOICES = [[30000, '30s'], [60000, '1m'], [300000, '5m'], [0, 'Off']];
+    function refreshMs() {
+        try {
+            const v = parseInt(localStorage.getItem('snmpcanvas-refresh'), 10);
+            if (REFRESH_CHOICES.some(([ms]) => ms === v)) return v;
+        } catch (e) { /* fall through */ }
+        return 30000;
+    }
+
     // Wide layout: a per-browser preference like the column set. The
     // centered layout is the identity default; wide is for many columns on
     // a big screen. Applied as a body class so every view inherits it.
@@ -398,6 +410,9 @@
             <h1>Devices</h1>
             <span class="sub">${devices.length} device${devices.length === 1 ? '' : 's'}</span>
             <span class="spacer"></span>
+            <select id="refresh-sel" class="small" title="How often this page refreshes itself - a per-browser preference. Refreshing preserves your scroll position and never fires while the Columns panel is open.">
+                ${REFRESH_CHOICES.map(([ms, label]) => `<option value="${ms}" ${refreshMs() === ms ? 'selected' : ''}>${label === 'Off' ? 'Refresh: off' : 'Refresh: ' + label}</option>`).join('')}
+            </select>
             <div style="position:relative">
                 <button id="cols-btn" class="small" title="Choose which columns the table shows - a per-browser preference">Columns</button>
                 <div id="cols-panel" class="panel" style="display:none;position:absolute;right:0;top:110%;z-index:50;min-width:180px;padding:10px 12px">
@@ -427,6 +442,10 @@
         </tbody></table>`}
         </div>`;
         document.getElementById('add-btn').addEventListener('click', addDeviceWizard);
+        document.getElementById('refresh-sel').addEventListener('change', (ev) => {
+            try { localStorage.setItem('snmpcanvas-refresh', ev.target.value); } catch (e) { /* ignore */ }
+            renderDevices();
+        });
         const colsBtn = document.getElementById('cols-btn');
         const colsPanel = document.getElementById('cols-panel');
         colsBtn.addEventListener('click', (ev) => {
@@ -455,7 +474,25 @@
                 renderDevices();
             });
         }
-        setAutoRefresh(() => { if (location.hash === '' || location.hash === '#/devices') renderDevices(); }, 30000);
+        // Auto-refresh: honor the interval preference; skip a tick while the
+        // Columns panel is open (a refresh would slam it shut mid-choice);
+        // and preserve scroll across the re-render - a wide table snapped
+        // back to the left edge on every tick, which made the far columns
+        // unreadable in practice.
+        const ms = refreshMs();
+        setAutoRefresh(ms === 0 ? null : () => {
+            if (location.hash !== '' && location.hash !== '#/devices') return;
+            const panel = document.getElementById('cols-panel');
+            if (panel && panel.style.display !== 'none') return;
+            const scroller = $main.querySelector('.table-scroll');
+            const keepX = scroller ? scroller.scrollLeft : 0;
+            const keepY = window.scrollY;
+            Promise.resolve(renderDevices()).then(() => {
+                const s2 = $main.querySelector('.table-scroll');
+                if (s2 && keepX) s2.scrollLeft = keepX;
+                if (keepY) window.scrollTo(0, keepY);
+            });
+        }, ms);
     }
 
     // ===== add-device wizard =====
@@ -933,7 +970,18 @@
                 renderDevice(id);
             }
         });
-        setAutoRefresh(() => { if (location.hash === `#/device/${id}`) renderDevice(id); }, 30000);
+        const dms = refreshMs();
+        setAutoRefresh(dms === 0 ? null : () => {
+            if (location.hash !== `#/device/${id}`) return;
+            const scroller = $main.querySelector('.table-scroll');
+            const keepX = scroller ? scroller.scrollLeft : 0;
+            const keepY = window.scrollY;
+            Promise.resolve(renderDevice(id)).then(() => {
+                const s2 = $main.querySelector('.table-scroll');
+                if (s2 && keepX) s2.scrollLeft = keepX;
+                if (keepY) window.scrollTo(0, keepY);
+            });
+        }, dms);
     }
 
     function resourceCard(e) {
