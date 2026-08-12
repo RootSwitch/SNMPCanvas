@@ -264,8 +264,70 @@
         topbw: (d) => (d.topIf && d.topIf.bps != null) ? d.topIf.bps : -1,
         ifcount: (d) => d.interfaceCount,
         uptime: (d) => d.uptimeSeconds ?? -1,
-        lastpoll: (d) => d.lastPollTs ?? 0
+        lastpoll: (d) => d.lastPollTs ?? 0,
+        downports: (d) => d.downPorts ?? -1,
+        errs: (d) => d.worstIfErrs ?? -1,
+        health: (d) => d.health ? (d.health.state === 'alarm' ? 2 : 1) : 0,
+        ups: (d) => (d.ups && d.ups.chargePct != null) ? d.ups.chargePct : -1,
+        location: (d) => (d.sysLocation || '').toLowerCase()
     };
+
+    // The fleet table's column registry. Status and Name are the row's
+    // identity and always render; everything else is pickable. DEFAULT_COLS
+    // is exactly the historical table, so an untouched install changes
+    // nothing; the extra columns (down ports, errors, health, UPS, location)
+    // start hidden and cost only their cell when shown - the API sends the
+    // data either way. Column choice is a per-browser viewer preference
+    // (localStorage), like the sort: it changes what YOU see, not the board.
+    const errFmt = (n) => n == null ? '<span class="muted">N/A</span>' : esc(n.toFixed(2).replace(/^0\.00$/, '0'));
+    const DEVICE_COLS = [
+        { key: 'host', label: 'Address', sort: 'host', cell: (d) => `${esc(d.host)}${d.port !== 161 ? ':' + d.port : ''}` },
+        { key: 'cpu', label: 'CPU', th: 'num', sort: 'cpu',
+          cell: (d, stale) => `<td class="num${stale ? ' muted' : ''}">${d.cpuPct == null ? '<span class="muted">N/A</span>' : esc(d.cpuPct.toFixed(0)) + '%'}</td>`, raw: true },
+        { key: 'topif', label: 'Top interface', sort: null,
+          cell: (d, stale) => `<td class="${stale ? 'muted' : ''}">${d.topIf ? esc(d.topIf.name) : '<span class="muted">N/A</span>'}</td>`, raw: true },
+        { key: 'topbw', label: 'Top usage', th: 'num', sort: 'topbw',
+          cell: (d, stale) => `<td class="num${stale ? ' muted' : ''}">${d.topIf && d.topIf.bps != null
+              ? fmtBps(d.topIf.bps) + (d.topIf.pct != null ? ` <span class="muted">(${d.topIf.pct < 1 ? '<1' : esc(d.topIf.pct.toFixed(0))}%)</span>` : '')
+              : '<span class="muted">N/A</span>'}</td>`, raw: true },
+        { key: 'downports', label: 'Down ports', th: 'num', sort: 'downports',
+          cell: (d) => d.downPorts > 0
+              ? `<strong>${d.downPorts}</strong> of ${d.interfaceCount}`
+              : `<span class="muted">0 of ${d.interfaceCount}</span>`,
+          title: 'Tracked interfaces operationally down while administratively up - ports someone shut on purpose are not counted' },
+        { key: 'errs', label: 'Errors/s', th: 'num', sort: 'errs',
+          cell: (d) => errFmt(d.worstIfErrs),
+          title: 'Worst tracked interface right now, in + out errors per second' },
+        { key: 'health', label: 'Health', sort: 'health',
+          cell: (d) => !d.health ? '<span class="muted">N/A</span>'
+              : d.health.state === 'alarm'
+                  ? `<span class="badge down">${d.health.alarms} alarm${d.health.alarms === 1 ? '' : 's'}</span>`
+                  : '<span class="badge up">ok</span>',
+          title: 'Worst case over the device&#39;s binary status sensors (on-battery, fan/PSU alarms). N/A = the device exposes none' },
+        { key: 'ups', label: 'UPS', th: 'num', sort: 'ups',
+          cell: (d) => !d.ups ? '<span class="muted">N/A</span>'
+              : `${d.ups.chargePct != null ? esc(String(d.ups.chargePct)) + '%' : ''}${d.ups.runtimeS != null ? `${d.ups.chargePct != null ? ' <span class="muted">&middot;</span> ' : ''}${fmtUptime(d.ups.runtimeS)}` : ''}`,
+          title: 'Battery charge and estimated runtime, on devices that report them' },
+        { key: 'location', label: 'Location', sort: 'location',
+          cell: (d) => d.sysLocation ? esc(d.sysLocation) : '<span class="muted">N/A</span>',
+          title: 'SNMP sysLocation' },
+        { key: 'ifcount', label: 'Interfaces', th: 'num hide-sm', sort: 'ifcount', cell: (d) => String(d.interfaceCount) },
+        { key: 'uptime', label: 'Uptime', th: 'num', sort: 'uptime', cell: (d) => fmtUptime(d.uptimeSeconds) },
+        { key: 'lastpoll', label: 'Last poll', th: 'num hide-sm', sort: 'lastpoll',
+          cell: (d) => `<td class="num muted hide-sm">${fmtAgo(d.lastPollTs)}</td>`, raw: true }
+    ];
+    const DEFAULT_COLS = ['host', 'cpu', 'topif', 'topbw', 'ifcount', 'uptime', 'lastpoll'];
+    function visibleCols() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('snmpcanvas-cols'));
+            if (Array.isArray(saved) && saved.length) {
+                const valid = new Set(DEVICE_COLS.map((c) => c.key));
+                const keys = saved.filter((k) => valid.has(k));
+                if (keys.length) return keys;
+            }
+        } catch (e) { /* fall through to default */ }
+        return DEFAULT_COLS.slice();
+    }
 
     async function renderDevices() {
         setNav('devices', true);
@@ -275,12 +337,25 @@
             const x = val(a), y = val(b);
             return (x < y ? -1 : x > y ? 1 : 0) * deviceSort.dir;
         });
-        const arrow = (key) => deviceSort.key === key ? (deviceSort.dir === 1 ? ' ▲' : ' ▼') : '';
+        const arrow = (key) => deviceSort.key === key ? (deviceSort.dir === 1 ? ' \u25B2' : ' \u25BC') : '';
+        const shownKeys = visibleCols();
+        // Registry order, not saved order - the table reads the same
+        // whichever sequence the boxes were ticked in.
+        const cols = DEVICE_COLS.filter((c) => shownKeys.includes(c.key));
+        const th = (c) => c.sort
+            ? `<th class="${c.th ? c.th + ' ' : ''}sortable" data-sort="${c.sort}"${c.title ? ` title="${c.title}"` : ''}>${c.label}${arrow(c.sort)}</th>`
+            : `<th${c.th ? ` class="${c.th}"` : ''}${c.title ? ` title="${c.title}"` : ''}>${c.label}</th>`;
         $main.innerHTML = `
         <div class="page-head">
             <h1>Devices</h1>
             <span class="sub">${devices.length} device${devices.length === 1 ? '' : 's'}</span>
             <span class="spacer"></span>
+            <div style="position:relative">
+                <button id="cols-btn" class="small" title="Choose which columns the table shows - a per-browser preference">Columns</button>
+                <div id="cols-panel" class="panel" style="display:none;position:absolute;right:0;top:110%;z-index:50;min-width:180px;padding:10px 12px">
+                    ${DEVICE_COLS.map((c) => `<label style="display:block;padding:2px 0"><input type="checkbox" data-col="${c.key}" ${shownKeys.includes(c.key) ? 'checked' : ''}> ${c.label}</label>`).join('')}
+                </div>
+            </div>
             <button id="add-btn" class="btn-primary">+ Add device</button>
         </div>
         <div class="panel">
@@ -288,37 +363,34 @@
         <table class="list"><thead><tr>
             <th class="sortable" data-sort="status">Status${arrow('status')}</th>
             <th class="sortable" data-sort="name">Name${arrow('name')}</th>
-            <th class="sortable" data-sort="host">Address${arrow('host')}</th>
-            <th class="num sortable" data-sort="cpu">CPU${arrow('cpu')}</th>
-            <th>Top interface</th>
-            <th class="num sortable" data-sort="topbw">Top usage${arrow('topbw')}</th>
-            <th class="num hide-sm sortable" data-sort="ifcount">Interfaces${arrow('ifcount')}</th>
-            <th class="num sortable" data-sort="uptime">Uptime${arrow('uptime')}</th>
-            <th class="num hide-sm sortable" data-sort="lastpoll">Last poll${arrow('lastpoll')}</th>
+            ${cols.map(th).join('')}
         </tr></thead><tbody>
         ${devices.map((d) => {
             const stale = d.status !== 'up';
-            const cpu = d.cpuPct == null ? '<span class="muted">N/A</span>' : esc(d.cpuPct.toFixed(0)) + '%';
-            const topName = d.topIf ? esc(d.topIf.name) : '<span class="muted">N/A</span>';
-            const topBw = d.topIf && d.topIf.bps != null
-                ? fmtBps(d.topIf.bps) + (d.topIf.pct != null ? ` <span class="muted">(${d.topIf.pct < 1 ? '<1' : esc(d.topIf.pct.toFixed(0))}%)</span>` : '')
-                : '<span class="muted">N/A</span>';
             return `
             <tr class="rowlink" data-id="${d.id}" title="${esc((d.sysDescr || '').slice(0, 160))}">
                 <td>${dot(d.status)}${esc(d.status)}${d.enabled ? '' : ' <span class="badge">paused</span>'}</td>
                 <td><strong>${esc(d.name)}</strong></td>
-                <td>${esc(d.host)}${d.port !== 161 ? ':' + d.port : ''}</td>
-                <td class="num${stale ? ' muted' : ''}">${cpu}</td>
-                <td class="${stale ? 'muted' : ''}">${topName}</td>
-                <td class="num${stale ? ' muted' : ''}">${topBw}</td>
-                <td class="num hide-sm">${d.interfaceCount}</td>
-                <td class="num">${fmtUptime(d.uptimeSeconds)}</td>
-                <td class="num muted hide-sm">${fmtAgo(d.lastPollTs)}</td>
+                ${cols.map((c) => c.raw ? c.cell(d, stale) : `<td${c.th ? ` class="${c.th}"` : ''}>${c.cell(d, stale)}</td>`).join('')}
             </tr>`;
         }).join('')}
         </tbody></table>`}
         </div>`;
         document.getElementById('add-btn').addEventListener('click', addDeviceWizard);
+        const colsBtn = document.getElementById('cols-btn');
+        const colsPanel = document.getElementById('cols-panel');
+        colsBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            colsPanel.style.display = colsPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        colsPanel.addEventListener('click', (ev) => ev.stopPropagation());
+        for (const cb of colsPanel.querySelectorAll('input[data-col]')) {
+            cb.addEventListener('change', () => {
+                const keys = [...colsPanel.querySelectorAll('input[data-col]:checked')].map((x) => x.dataset.col);
+                try { localStorage.setItem('snmpcanvas-cols', JSON.stringify(keys)); } catch (e) { /* ignore */ }
+                renderDevices();
+            });
+        }
         for (const tr of $main.querySelectorAll('tr.rowlink')) {
             tr.addEventListener('click', () => { location.hash = `#/device/${tr.dataset.id}`; });
         }

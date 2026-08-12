@@ -53,6 +53,10 @@ written to a small JSON status file every cycle, for other tools to read.
   (when the device exposes them), then every interface with live in/out
   rates, errors, and discards. A filter box and per-interface Track/Export
   toggles keep big switches manageable.
+- **Pickable summary columns** - a Columns button on the device list adds
+  down-port counts, worst interface errors/s, sensor health, UPS charge and
+  runtime, or sysLocation to the fleet table (per-browser preference; the
+  default layout is unchanged). Absent data shows as N/A, never as a guess.
 - **History graphs** - click any interface or resource card: traffic
   (average + peak), errors/discards and a link-status strip, from 1 hour to
   90 days. Charts are hand-drawn SVG that follows the app theme, with an

@@ -112,6 +112,78 @@ function deviceSummary(d) {
     };
 }
 
+// The fleet-table payload: one row per device with its summary columns.
+// Extracted from the GET /api/devices handler so tools/check-columns.js can
+// drive it against a seeded database - these aggregates (down ports, worst
+// errors, health, UPS) are reductions with edge cases worth pinning.
+function deviceListSummaries() {
+    const devices = db.prepare('SELECT * FROM devices ORDER BY name COLLATE NOCASE').all();
+    const ifCount = db.prepare("SELECT count(*) AS n FROM entities WHERE device_id = ? AND kind = 'if' AND tracked = 1");
+    const cpuEnt = db.prepare("SELECT id FROM entities WHERE device_id = ? AND kind = 'cpu' AND tracked = 1 LIMIT 1");
+    const ifEnts = db.prepare(`SELECT id, name, speed_bps, speed_untrusted, speed_override_bps,
+                                      admin_status, oper_status
+                               FROM entities WHERE device_id = ? AND kind = 'if' AND tracked = 1`);
+    const auxEnts = db.prepare(`SELECT id, kind FROM entities
+                                WHERE device_id = ? AND tracked = 1 AND kind IN ('state','battery','runtime')`);
+    const latest = db.prepare('SELECT v0, v1, v2, v3, v4, v5 FROM samples WHERE entity_id = ? ORDER BY ts DESC LIMIT 1');
+    return devices.map((d) => {
+        // CPU % - null when the device has no CPU entity (shown as N/A).
+        const cpu = cpuEnt.get(d.id);
+        const cpuSample = cpu ? latest.get(cpu.id) : null;
+        // Busiest interface right now: highest of in/out bps across tracked
+        // interfaces, with utilization % when the EFFECTIVE speed is known
+        // (override, else advertised-while-trusted - an unrated virtio NIC
+        // shows honest raw bps with no percentage).
+        let topIf = null;
+        let downPorts = 0;
+        let worstIfErrs = null;
+        for (const e of ifEnts.all(d.id)) {
+            // Down = operationally down while administratively up; a port
+            // someone shut on purpose is not a problem to surface.
+            if (e.oper_status === 2 && e.admin_status === 1) downPorts++;
+            const s = latest.get(e.id);
+            if (!s) continue;
+            const errs = (s.v2 ?? 0) + (s.v3 ?? 0);
+            if (s.v2 != null || s.v3 != null) worstIfErrs = Math.max(worstIfErrs ?? 0, errs);
+            const bps = Math.max(s.v0 ?? -1, s.v1 ?? -1);
+            if (bps < 0) continue;
+            if (!topIf || bps > topIf.bps) {
+                const effSpeed = e.speed_override_bps > 0 ? e.speed_override_bps
+                    : (e.speed_untrusted ? null : (e.speed_bps || null));
+                topIf = { entityId: e.id, name: e.name, bps, pct: effSpeed > 0 ? bps / effSpeed * 100 : null };
+            }
+        }
+        // Health: worst case over the device's binary state entities
+        // (PSU on-battery, fan alarms...). Absent kinds mean no column
+        // content, never a fake "ok".
+        let health = null;
+        let ups = null;
+        for (const e of auxEnts.all(d.id)) {
+            const s = latest.get(e.id);
+            if (!s || s.v0 == null) continue;
+            if (e.kind === 'state') {
+                if (!health) health = { state: 'ok', alarms: 0 };
+                if (s.v0) { health.state = 'alarm'; health.alarms++; }
+            } else if (e.kind === 'battery') {
+                ups = { ...(ups || {}), chargePct: Math.round(s.v0) };
+            } else if (e.kind === 'runtime') {
+                ups = { ...(ups || {}), runtimeS: Math.round(s.v0) };
+            }
+        }
+        return {
+            ...deviceSummary(d),
+            interfaceCount: ifCount.get(d.id).n,
+            cpuPct: cpuSample ? cpuSample.v0 : null,
+            topIf,
+            downPorts,
+            worstIfErrs,
+            health,
+            ups,
+            sysLocation: d.sys_location || null
+        };
+    });
+}
+
 function entitySummary(e, latest) {
     const extra = e.extra ? JSON.parse(e.extra) : {};
     // speedBps is the EFFECTIVE speed every consumer may divide by:
@@ -219,34 +291,7 @@ const routes = [
     } },
 
     { method: 'GET', path: /^\/api\/devices$/, handler: (req, res) => {
-        const devices = db.prepare('SELECT * FROM devices ORDER BY name COLLATE NOCASE').all();
-        const ifCount = db.prepare("SELECT count(*) AS n FROM entities WHERE device_id = ? AND kind = 'if' AND tracked = 1");
-        const cpuEnt = db.prepare("SELECT id FROM entities WHERE device_id = ? AND kind = 'cpu' AND tracked = 1 LIMIT 1");
-        const ifEnts = db.prepare("SELECT id, name, speed_bps FROM entities WHERE device_id = ? AND kind = 'if' AND tracked = 1");
-        const latest = db.prepare('SELECT v0, v1 FROM samples WHERE entity_id = ? ORDER BY ts DESC LIMIT 1');
-        ok(res, { devices: devices.map((d) => {
-            // CPU % - null when the device has no CPU entity (shown as N/A).
-            const cpu = cpuEnt.get(d.id);
-            const cpuSample = cpu ? latest.get(cpu.id) : null;
-            // Busiest interface right now: highest of in/out bps across
-            // tracked interfaces, with utilization % when the speed is known.
-            let topIf = null;
-            for (const e of ifEnts.all(d.id)) {
-                const s = latest.get(e.id);
-                if (!s) continue;
-                const bps = Math.max(s.v0 ?? -1, s.v1 ?? -1);
-                if (bps < 0) continue;
-                if (!topIf || bps > topIf.bps) {
-                    topIf = { entityId: e.id, name: e.name, bps, pct: e.speed_bps > 0 ? bps / e.speed_bps * 100 : null };
-                }
-            }
-            return {
-                ...deviceSummary(d),
-                interfaceCount: ifCount.get(d.id).n,
-                cpuPct: cpuSample ? cpuSample.v0 : null,
-                topIf
-            };
-        }) });
+        ok(res, { devices: deviceListSummaries() });
     } },
 
     { method: 'POST', path: /^\/api\/devices\/probe$/, handler: async (req, res, p, body) => {
@@ -771,4 +816,4 @@ function readJson(req, limit = 1024 * 1024) {
     });
 }
 
-module.exports = { handle };
+module.exports = { handle, deviceListSummaries };

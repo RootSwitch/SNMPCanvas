@@ -2,6 +2,22 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Column picker on the device list, plus five new summary columns.** A
+  `Columns` button on the Devices page chooses what the fleet table shows -
+  a per-browser preference (like the sort), defaulting to exactly the
+  historical layout. New pickable columns, all read-side over data already
+  polled: **Down ports** (operationally down while administratively up -
+  ports someone shut on purpose are not counted), **Errors/s** (worst
+  tracked interface, in + out), **Health** (worst case over the device's
+  binary status sensors - one alarm turns the cell red; devices exposing no
+  sensors show N/A, never a fake ok), **UPS** (charge and estimated
+  runtime), and **Location** (sysLocation). Every new column is honest
+  about absence: blank or N/A means the device does not report it. The
+  Top-usage percentage also now uses the EFFECTIVE speed from the
+  speed-trust work, so an unrated virtio NIC shows raw bps with no
+  fictional percentage in the fleet table too. Covered by
+  `tools/check-columns.js` in `npm test`.
+
 - **Speed trust: advertised interface speeds are claims, and fictional claims
   stop lying to you.** Virtual NICs (virtio, Hyper-V netvsc) advertise link
   speeds with no relationship to what their host-local datapath carries, which
