@@ -744,7 +744,7 @@
                         ${e.stale ? '<span class="badge stale" title="ifIndex may have moved - rediscover this device">stale</span>' : ''}</td>
                     <td><strong>${esc(e.name)}</strong> ${codeChip(e.code)}</td>
                     <td class="muted hide-sm">${esc(e.alias)}</td>
-                    <td class="num">${fmtSpeed(e.speedBps)}</td>
+                    <td class="num">${fmtSpeed(e.speedBps)}${e.speedUntrusted ? ' <span class="badge stale" title="Advertised speed disproven by measured traffic (common on virtio / Hyper-V NICs) - utilization is suspended. Open the interface and set a speed override to restore it.">unrated</span>' : ''}${e.speedOverrideBps ? ' <span class="badge" title="Operator speed override - utilization uses this, not the advertised speed">set</span>' : ''}</td>
                     <td class="num">${e.tracked ? fmtBps(v[0]) : '-'}</td>
                     <td class="num">${e.tracked ? fmtBps(v[1]) : '-'}</td>
                     <td class="num hide-sm">${e.tracked ? ((v[2] ?? 0) + (v[3] ?? 0)).toFixed(2).replace(/^0\.00$/, '0') : '-'}</td>
@@ -1081,7 +1081,35 @@
                     title="Pin the traffic y-axis to the link speed (${fmtSpeed(data.speedBps)}bps) so the chart reads as utilization">Link scale</button>` : ''}
             </div>
         </div>
+        ${kind === 'if' && (data.speedUntrusted || data.speedOverrideBps) ? `
+        <div class="panel" id="speed-trust" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            ${data.speedOverrideBps
+                ? `<span>Speed override: <strong>${fmtSpeed(data.speedOverrideBps)}bps</strong></span>
+                   <span class="muted small">advertised ${fmtSpeed(data.advertisedBps)}bps</span>
+                   <button id="speed-clear-btn" class="small">Clear override</button>`
+                : `<span class="badge stale">unrated</span>
+                   <span class="muted">advertised ${fmtSpeed(data.advertisedBps)}bps was disproven by measured traffic - utilization and its alerts are suspended</span>
+                   <button id="speed-set-btn" class="small">Set actual speed…</button>
+                   <button id="speed-trust-btn" class="small" title="Vouch for the advertised speed again; the poller will re-suspend it if traffic disproves it">Trust advertised</button>`}
+        </div>` : ''}
         <div id="charts"></div>`;
+
+        const patchSpeed = async (bodyPatch) => {
+            try { await api('PATCH', `/api/entities/${entityId}`, bodyPatch); renderEntity(deviceId, entityId, rangeSec); }
+            catch (e) { alert(e.message); }
+        };
+        const setBtn = document.getElementById('speed-set-btn');
+        if (setBtn) setBtn.addEventListener('click', () => {
+            const raw = prompt('Actual link speed in Mbps (e.g. 10000 for 10G). Blank cancels.');
+            if (raw == null || raw.trim() === '') return;
+            const mbps = Number(raw);
+            if (!Number.isFinite(mbps) || mbps <= 0) { alert('Enter a positive number of Mbps.'); return; }
+            patchSpeed({ speedOverrideBps: Math.round(mbps * 1e6) });
+        });
+        const clearBtn = document.getElementById('speed-clear-btn');
+        if (clearBtn) clearBtn.addEventListener('click', () => patchSpeed({ speedOverrideBps: null }));
+        const trustBtn = document.getElementById('speed-trust-btn');
+        if (trustBtn) trustBtn.addEventListener('click', () => patchSpeed({ speedTrusted: true }));
 
         for (const b of $main.querySelectorAll('[data-range]')) {
             b.addEventListener('click', () => renderEntity(deviceId, entityId, +b.dataset.range));

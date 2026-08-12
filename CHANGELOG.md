@@ -2,6 +2,27 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Speed trust: advertised interface speeds are claims, and fictional claims
+  stop lying to you.** Virtual NICs (virtio, Hyper-V netvsc) advertise link
+  speeds with no relationship to what their host-local datapath carries, which
+  produced two defects with one root cause: utilization alerts at 133-153%
+  during replication windows, and - worse, and invisible - the sanity clamp
+  discarding any sample above 2x the fictional speed, so the FASTEST traffic
+  never reached the graphs. Now a measured rate exceeding the advertised speed
+  beyond timing jitter (>1.10x, 64-bit counters only - a 32-bit rate can
+  itself be wrap garbage and cannot convict) marks the interface's speed
+  **untrusted**, permanently and visibly (an `unrated` badge): utilization
+  shows `-` instead of a fiction, the clamp falls back to an absolute physical
+  ceiling so real bursts survive, and the export feed carries
+  `speedBps: null` - which switches AlertCanvas's utilization rules off for
+  that interface with no AlertCanvas change at all. A **per-interface speed
+  override** (interface page - "Set actual speed") is the operator's honest
+  number: it outranks both the claim and the verdict, restores utilization
+  and its alerts, and is never second-guessed. "Trust advertised" hands the
+  claim a fresh chance; the poller re-convicts if traffic disproves it again,
+  and a *changed* advertised speed (a genuine renegotiation) also earns fresh
+  trust automatically. Covered by `tools/check-speed-trust.js` in `npm test`.
+
 - **Device-uptime metrics carry `sampledAt` as epoch seconds, like everything else
   in the feed.** Schema v4 moved every `sampledAt` from an ISO string to epoch
   seconds, but the device-uptime entry is built by hand rather than mapped from a

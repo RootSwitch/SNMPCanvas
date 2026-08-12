@@ -58,7 +58,10 @@ written to a small JSON status file every cycle, for other tools to read.
   90 days. Charts are hand-drawn SVG that follows the app theme, with an
   optional link-speed scale for honest utilization reading. Ranges of a day
   or more are served from an hourly rollup, so a 90-day graph stays fast on
-  a Raspberry Pi.
+  a Raspberry Pi. Advertised speeds are treated as claims: an interface that
+  measurably exceeds its claim (virtio and Hyper-V NICs advertise fiction)
+  is marked `unrated` - utilization and its alerts go quiet instead of lying
+  - and a per-interface speed override restores them with the honest number.
 - **Add-device flow** - enter an address and credentials; SNMPCanvas
   verifies with a GET, walks the standard tables, and shows you everything
   it found so you choose what gets tracked. No MIB files involved -

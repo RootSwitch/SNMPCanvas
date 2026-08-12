@@ -114,9 +114,18 @@ function deviceSummary(d) {
 
 function entitySummary(e, latest) {
     const extra = e.extra ? JSON.parse(e.extra) : {};
+    // speedBps is the EFFECTIVE speed every consumer may divide by:
+    // operator override first, advertised only while trusted, else null
+    // (virtio/netvsc advertise fiction - see poller.speedTrustAndClamp).
+    // advertisedBps carries the raw claim for display.
+    const effSpeed = e.speed_override_bps > 0 ? e.speed_override_bps
+        : (e.speed_untrusted ? null : (e.speed_bps || null));
     return {
         id: e.id, kind: e.kind, snmpIndex: e.snmp_index, name: e.name, alias: e.alias || '', code: e.code || null,
-        speedBps: e.speed_bps, tracked: !!e.tracked, export: !!e.export, stale: !!e.stale,
+        speedBps: effSpeed, advertisedBps: e.speed_bps || null,
+        speedUntrusted: e.speed_untrusted ? true : undefined,
+        speedOverrideBps: e.speed_override_bps > 0 ? e.speed_override_bps : undefined,
+        tracked: !!e.tracked, export: !!e.export, stale: !!e.stale,
         adminStatus: e.admin_status, operStatus: e.oper_status,
         hc: extra.hc !== undefined ? !!extra.hc : undefined,
         unit: extra.unit || undefined, meterMax: extra.max || undefined,
@@ -457,9 +466,21 @@ const routes = [
         if (!e) return notFound(res);
         const tracked = body.tracked !== undefined ? (body.tracked ? 1 : 0) : e.tracked;
         const exp = body.export !== undefined ? (body.export ? 1 : 0) : e.export;
-        db.prepare('UPDATE entities SET tracked = ?, export = ? WHERE id = ?')
-            .run(tracked, tracked ? exp : 0, e.id);
-        if (exp !== e.export || tracked !== e.tracked) exporter.scheduleWrite();
+        // Speed override: a positive bps number sets it, null/0 clears it.
+        // speedTrusted: true clears an earned untrusted verdict (the operator
+        // vouching for the advertised speed again - e.g. after fixing a
+        // mislabeled port); the poller will re-convict if traffic disproves it.
+        let override = e.speed_override_bps;
+        if (body.speedOverrideBps !== undefined) {
+            const n = Number(body.speedOverrideBps);
+            override = Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+        }
+        let untrusted = e.speed_untrusted;
+        if (body.speedTrusted === true) untrusted = 0;
+        db.prepare('UPDATE entities SET tracked = ?, export = ?, speed_override_bps = ?, speed_untrusted = ? WHERE id = ?')
+            .run(tracked, tracked ? exp : 0, override, untrusted, e.id);
+        if (exp !== e.export || tracked !== e.tracked ||
+            override !== e.speed_override_bps || untrusted !== e.speed_untrusted) exporter.scheduleWrite();
         ok(res);
     } },
 
@@ -541,7 +562,14 @@ const routes = [
                 GROUP BY t ORDER BY t`).all({ b, id: e.id, from, to, mark });
         const sx = e.extra ? JSON.parse(e.extra) : {};
         ok(res, {
-            kind: e.kind, name: e.name, code: e.code || null, speedBps: e.speed_bps, bucketSec: bucket, from, to,
+            kind: e.kind, name: e.name, code: e.code || null,
+            // effective speed (same rule as entitySummary) + provenance
+            speedBps: e.speed_override_bps > 0 ? e.speed_override_bps
+                : (e.speed_untrusted ? null : (e.speed_bps || null)),
+            advertisedBps: e.speed_bps || null,
+            speedUntrusted: e.speed_untrusted ? true : undefined,
+            speedOverrideBps: e.speed_override_bps > 0 ? e.speed_override_bps : undefined,
+            bucketSec: bucket, from, to,
             unit: sx.unit || undefined, meterMax: sx.max || undefined,
             okText: sx.okText || undefined, alarmText: sx.alarmText || undefined,
             points: rows.map((r) => [r.t, r.a0, r.m0, r.a1, r.m1, r.a2, r.a3, r.a4, r.a5, r.st])

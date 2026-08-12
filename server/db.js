@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS entities (
   name         TEXT,
   alias        TEXT,
   speed_bps    INTEGER,
+  -- Advertised speed is a CLAIM (virtio/netvsc advertise fiction).
+  -- speed_untrusted flips when a measured rate exceeds the claim beyond
+  -- timing jitter; speed_override_bps is the operator's honest number and
+  -- outranks both. See poller.js speed-trust block.
+  speed_untrusted    INTEGER NOT NULL DEFAULT 0,
+  speed_override_bps INTEGER,
   extra        TEXT,
   tracked      INTEGER NOT NULL DEFAULT 1,
   export       INTEGER NOT NULL DEFAULT 0,
@@ -204,6 +210,8 @@ if (!entitySql.includes("'state'")) {
               name         TEXT,
               alias        TEXT,
               speed_bps    INTEGER,
+              speed_untrusted    INTEGER NOT NULL DEFAULT 0,
+              speed_override_bps INTEGER,
               extra        TEXT,
               tracked      INTEGER NOT NULL DEFAULT 1,
               export       INTEGER NOT NULL DEFAULT 0,
@@ -218,6 +226,8 @@ if (!entitySql.includes("'state'")) {
                                           tracked, export, admin_status, oper_status, stale, poll_state, code)
               SELECT id, device_id, kind, snmp_index, name, alias, speed_bps, extra,
                      tracked, export, admin_status, oper_status, stale, poll_state, code FROM entities;
+            -- new columns default-fill; the ALTER guards below cover DBs
+            -- that skip this rebuild
             DROP TABLE entities;
             ALTER TABLE entities_migrate RENAME TO entities;
         `);
@@ -227,6 +237,14 @@ if (!entitySql.includes("'state'")) {
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_entities_export ON entities(export) WHERE export = 1');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_code ON entities(code) WHERE code IS NOT NULL');
+
+// Speed-trust columns (added after the rebuild block on purpose: a database
+// that just went through the kind rebuild re-reads its columns here).
+{
+    const cols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
+    if (!cols.includes('speed_untrusted')) db.exec('ALTER TABLE entities ADD COLUMN speed_untrusted INTEGER NOT NULL DEFAULT 0');
+    if (!cols.includes('speed_override_bps')) db.exec('ALTER TABLE entities ADD COLUMN speed_override_bps INTEGER');
+}
 
 // Backfill codes for entities (any kind) and device uptime codes created
 // before those columns existed.

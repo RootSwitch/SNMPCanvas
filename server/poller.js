@@ -68,6 +68,10 @@ const pollSeq = new Map();       // device id -> counter (meta refresh cadence)
 let timer = null;
 
 const log = (...args) => console.log(new Date().toISOString(), '[poller]', ...args);
+// Absolute rate ceiling for interfaces with NO trusted speed: generous
+// beyond any single link this app will meet, so only true counter garbage
+// (undetected resets, double 32-bit wraps) becomes a gap.
+const ABS_RATE_CEILING = 2e12;   // 2 Tbps
 
 function intervalMs(device) {
     const s = device.poll_interval_s || parseInt(getSetting('poll_interval_s'), 10) || 300;
@@ -346,12 +350,7 @@ async function pollDevice(device) {
                         v[3] = rate(counters.outErr, prev.c.outErr, elapsed, false, 1);
                         v[4] = rate(counters.inDisc, prev.c.inDisc, elapsed, false, 1);
                         v[5] = rate(counters.outDisc, prev.c.outDisc, elapsed, false, 1);
-                        // Sanity clamp: an undetected reset / double 32-bit wrap
-                        // shows up as an impossible rate. Store the gap instead.
-                        if (e.speed_bps > 0) {
-                            if (v[0] != null && v[0] > e.speed_bps * 2) v[0] = null;
-                            if (v[1] != null && v[1] > e.speed_bps * 2) v[1] = null;
-                        }
+                        speedTrustAndClamp(e, v, is64, device.host);
                     }
                 }
                 const update = { id: e.id, oper_status: status, admin_status: admin, poll_state: JSON.stringify({ ts: started, c: counters }) };
@@ -363,7 +362,13 @@ async function pollDevice(device) {
                     // device renumbered after reboot - flag, don't guess.
                     update.stale = (newName != null && e.name && String(newName) !== e.name) ? 1 : 0;
                     if (newAlias != null) update.alias = String(newAlias);
-                    if (highSpeed > 0) update.speed_bps = highSpeed * 1e6;
+                    if (highSpeed > 0) {
+                        update.speed_bps = highSpeed * 1e6;
+                        // A CHANGED claim gets fresh trust - a genuine
+                        // renegotiation is a new speed to test. An unchanged
+                        // claim keeps its earned verdict.
+                        if (e.speed_untrusted && update.speed_bps !== e.speed_bps) update.speed_untrusted = 0;
+                    }
                 }
                 updates.push(update);
             } else if (e.kind === 'cpu') {
@@ -482,6 +487,44 @@ function tempToC(extra, raw) {
     return (c <= -40 || c >= 150) ? null : c;
 }
 
+// Speed trust + sanity clamp, one decision. Advertised ifSpeed/ifHighSpeed
+// is a CLAIM, and virtual NICs (virtio/netvsc) advertise fiction -
+// host-local traffic is not bounded by it. A measured rate beyond the claim
+// plus timing jitter PROVES the claim false: persist that verdict
+// (speed_untrusted) so utilization math and alerting stop dividing by a
+// lie. An operator override (speed_override_bps) outranks everything and is
+// never second-guessed here.
+//
+// Only 64-bit counters can CONVICT: a 32-bit rate can itself be wrap
+// garbage, and a false conviction would let that garbage into the graphs
+// from then on.
+//
+// The clamp half: an undetected reset / double 32-bit wrap shows up as an
+// impossible rate - store the gap instead. Only a TRUSTED speed can judge
+// "impossible"; clamping against fictional advertised speeds silently
+// discarded real replication traffic (the fastest samples, no less). With
+// no trusted speed, fall back to the absolute ceiling.
+//
+// Exported for tools/check-speed-trust.js - this is the whole defect
+// surface of the "133% utilization at replication time" bug class, so it
+// gets driven directly against a real database.
+function speedTrustAndClamp(e, v, is64, host) {
+    const override = e.speed_override_bps > 0 ? e.speed_override_bps : 0;
+    const advertised = e.speed_bps > 0 ? e.speed_bps : 0;
+    if (is64 && !override && advertised && !e.speed_untrusted) {
+        const worst = Math.max(v[0] ?? 0, v[1] ?? 0);
+        if (worst > advertised * 1.1) {
+            e.speed_untrusted = 1;   // effective for the clamp below
+            markSpeedUntrusted.run(e.id);
+            log(`${host} ${e.name || 'if.' + e.snmp_index}: measured ${Math.round(worst / 1e6)} Mbps exceeds advertised ${Math.round(advertised / 1e6)} Mbps - speed marked untrusted, utilization suspended (set a speed override to restore it)`);
+        }
+    }
+    const trustedSpeed = override || (e.speed_untrusted ? 0 : advertised);
+    const ceiling = trustedSpeed > 0 ? trustedSpeed * 2 : ABS_RATE_CEILING;
+    if (v[0] != null && v[0] > ceiling) v[0] = null;
+    if (v[1] != null && v[1] > ceiling) v[1] = null;
+}
+
 // Counter delta -> per-second rate. cur/prev are decimal strings (BigInt-safe).
 // mult=8 turns octets into bits. Returns null on reset/underflow/missing.
 function rate(cur, prev, elapsedSec, is64, mult) {
@@ -504,9 +547,11 @@ const updEntityStmt = db.prepare(`UPDATE entities SET
     admin_status = COALESCE(@admin_status, admin_status),
     alias = COALESCE(@alias, alias),
     speed_bps = COALESCE(@speed_bps, speed_bps),
+    speed_untrusted = COALESCE(@speed_untrusted, speed_untrusted),
     stale = COALESCE(@stale, stale),
     poll_state = @poll_state
     WHERE id = @id`);
+const markSpeedUntrusted = db.prepare('UPDATE entities SET speed_untrusted = 1 WHERE id = ?');
 
 function persistPoll(device, nowS, uptimeCs, rows, updates) {
     const ins = insertSample;
@@ -514,7 +559,7 @@ function persistPoll(device, nowS, uptimeCs, rows, updates) {
     db.transaction(() => {
         for (const r of rows) ins.run(r.entityId, nowS, r.status, ...r.v);
         for (const u of updates) {
-            updEntity.run({ oper_status: null, admin_status: null, alias: null, speed_bps: null, stale: null, ...u });
+            updEntity.run({ oper_status: null, admin_status: null, alias: null, speed_bps: null, speed_untrusted: null, stale: null, ...u });
         }
         db.prepare(`UPDATE devices SET status = 'up', last_poll_ts = ?, last_seen_ts = ?,
                     last_sysuptime_cs = ?, consecutive_failures = 0 WHERE id = ?`)
@@ -657,4 +702,4 @@ function setRollupMark(ts) {
       .run(String(ts));
 }
 
-module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged };
+module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged, speedTrustAndClamp };

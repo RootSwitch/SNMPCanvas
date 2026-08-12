@@ -129,7 +129,8 @@ function write() {
 
     // --- interfaces[] (unchanged from v1) ---
     const ifRows = db.prepare(`
-        SELECT e.id, e.snmp_index, e.name, e.alias, e.speed_bps, e.admin_status, e.oper_status, e.code, e.stale,
+        SELECT e.id, e.snmp_index, e.name, e.alias, e.speed_bps, e.speed_untrusted, e.speed_override_bps,
+               e.admin_status, e.oper_status, e.code, e.stale,
                d.name AS device_name, d.host, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id
         WHERE e.export = 1 AND e.kind = 'if' AND d.enabled = 1
@@ -163,7 +164,12 @@ function write() {
             // rewritten in full on every poll. Absence means not stale.
             ...(r.stale ? { stale: true } : {}),
             alias: r.alias || '',
-            speedBps: r.speed_bps || null,
+            // EFFECTIVE speed: override, else advertised-while-trusted, else
+            // null. AlertCanvas's utilization rules key on speedBps > 0, so a
+            // nulled speed switches util alerting off for fiction-speed
+            // virtual NICs (virtio/netvsc) with no AlertCanvas change at all.
+            speedBps: r.speed_override_bps > 0 ? r.speed_override_bps
+                : (r.speed_untrusted ? null : (r.speed_bps || null)),
             adminStatus: deviceUp ? (OPER_STATUS[r.admin_status] || 'unknown') : 'unknown',
             operStatus: deviceUp ? (OPER_STATUS[r.oper_status] || 'unknown') : 'unknown',
             // v4: epoch SECONDS, not a 24-char ISO string. Nothing renders this
