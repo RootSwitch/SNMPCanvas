@@ -2,6 +2,21 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Wide layout, and four more pickable columns.** A `Wide layout` toggle in
+  the Columns panel lets the table spend the whole window width - the
+  centered layout stays the default (the homelab look is deliberate; a
+  27-device fleet fills a 1080p pane exactly as before). New columns, all
+  honest reductions over data already polled: **Vendor** (the matched
+  profile key, full name on hover), **Temp** (a preference ladder, not a
+  max: a CPU or system/board sensor represents the device even when an NVMe
+  runs hotter; max is only the fallback, and the tooltip names the chosen
+  sensor), **Fullest FS** (a pick, never a sum, so ZFS-style nested
+  namespaces cannot double-count shared pool space), and **Memory** (used %
+  as the agent reports it, with the caveat in the tooltip: many Linux
+  agents count cache, where high is healthy - trust trends over the
+  absolute number). All new columns start hidden; absence renders as N/A,
+  never a guess.
+
 - **Column picker on the device list, plus five new summary columns.** A
   `Columns` button on the Devices page chooses what the fleet table shows -
   a per-browser preference (like the sort), defaulting to exactly the

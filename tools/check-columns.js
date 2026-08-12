@@ -59,6 +59,23 @@ insS.run(6, now, 1, null, null, null);      // PSU 2 ALARM
 insS.run(7, now, 94, null, null, null);     // 94% charge
 insS.run(8, now, 2760, null, null, null);   // 46m runtime
 
+// Tier B fixtures on edge-sw: temperature ladder (a hotter NVMe must NOT
+// beat the CPU sensor), fullest-FS pick (never sum - ZFS-style shared
+// space), and memory pct.
+insEnt.run(9, 1, 'temp', '1', 'CPU Temp', null, 0, null, null, null, 'C9');
+insEnt.run(10, 1, 'temp', '2', 'NVMe Composite', null, 0, null, null, null, 'C10');
+insEnt.run(11, 1, 'fs', '1', 'zroot', null, 0, null, null, null, 'C11');
+insEnt.run(12, 1, 'fs', '2', 'zroot/vm', null, 0, null, null, null, 'C12');
+insEnt.run(13, 1, 'mem', '1', 'Real memory', null, 0, null, null, null, 'C13');
+insS.run(9, now, 46, null, null, null);        // CPU 46C
+insS.run(10, now, 61, null, null, null);       // NVMe hotter - must not win
+insS.run(11, now, 820e9, 1000e9, null, null);  // zroot 82%
+insS.run(12, now, 120e9, 400e9, null, null);   // child dataset 30%
+insS.run(13, now, 6.2e9, 8e9, null, null);     // 77.5%
+// ups-1: a lone unnamed-family sensor falls back to max-of-all (itself).
+insEnt.run(14, 2, 'temp', '1', 'Battery Temperature', null, 0, null, null, null, 'C14');
+insS.run(14, now, 24, null, null, null);
+
 const rows = Object.fromEntries(deviceListSummaries().map((d) => [d.name, d]));
 
 check('down ports counts oper-down while admin-up only', rows['edge-sw'].downPorts === 1,
@@ -78,6 +95,21 @@ check('no interfaces means zero down ports and null errors',
     rows['ups-1'].downPorts === 0 && rows['ups-1'].worstIfErrs === null);
 check('a device with no sensors gets N/A health, never a fake ok', rows.bare.health === null);
 check('a device with no battery gets no UPS cell', rows.bare.ups === null);
+
+check('temperature ladder: CPU sensor beats a hotter peripheral',
+    rows['edge-sw'].temp.c === 46 && /CPU/.test(rows['edge-sw'].temp.name),
+    JSON.stringify(rows['edge-sw'].temp));
+check('...and reports how many sensors it chose from', rows['edge-sw'].temp.of === 2);
+check('no name match falls back to max-of-all',
+    rows['ups-1'].temp.c === 24 && rows['ups-1'].temp.of === 1,
+    JSON.stringify(rows['ups-1'].temp));
+check('fullest FS is a pick, not a sum', rows['edge-sw'].fs.name === 'zroot' && Math.round(rows['edge-sw'].fs.pct) === 82,
+    JSON.stringify(rows['edge-sw'].fs));
+check('memory reports used/total pct', Math.round(rows['edge-sw'].mem.pct) === 78,
+    JSON.stringify(rows['edge-sw'].mem));
+check('devices without temp/fs/mem stay null', rows.bare.temp === null && rows.bare.fs === null && rows.bare.mem === null);
+check('an unmatched vendor key gives a null label, never a fake',
+    rows['edge-sw'].vendorLabel === null);
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall column checks passed');
 process.exit(failures ? 1 : 0);

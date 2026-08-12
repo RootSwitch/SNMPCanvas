@@ -112,6 +112,12 @@ function deviceSummary(d) {
     };
 }
 
+// vendor_key -> human label, from the same VENDORS table discovery matched
+// against. Key stays the compact display; the label rides the tooltip.
+const { VENDORS } = require('./oids');
+const VENDOR_LABELS = Object.fromEntries(VENDORS.map((v) => [v.key, v.label]));
+function vendorLabelFor(key) { return key ? (VENDOR_LABELS[key] || null) : null; }
+
 // The fleet-table payload: one row per device with its summary columns.
 // Extracted from the GET /api/devices handler so tools/check-columns.js can
 // drive it against a seeded database - these aggregates (down ports, worst
@@ -123,8 +129,9 @@ function deviceListSummaries() {
     const ifEnts = db.prepare(`SELECT id, name, speed_bps, speed_untrusted, speed_override_bps,
                                       admin_status, oper_status
                                FROM entities WHERE device_id = ? AND kind = 'if' AND tracked = 1`);
-    const auxEnts = db.prepare(`SELECT id, kind FROM entities
-                                WHERE device_id = ? AND tracked = 1 AND kind IN ('state','battery','runtime')`);
+    const auxEnts = db.prepare(`SELECT id, kind, name FROM entities
+                                WHERE device_id = ? AND tracked = 1
+                                AND kind IN ('state','battery','runtime','temp','fs','mem')`);
     const latest = db.prepare('SELECT v0, v1, v2, v3, v4, v5 FROM samples WHERE entity_id = ? ORDER BY ts DESC LIMIT 1');
     return devices.map((d) => {
         // CPU % - null when the device has no CPU entity (shown as N/A).
@@ -158,6 +165,15 @@ function deviceListSummaries() {
         // content, never a fake "ok".
         let health = null;
         let ups = null;
+        // Temperature is a PREFERENCE LADDER, not a max: a CPU or
+        // system/board sensor represents "the device's temperature" even
+        // when an NVMe or PSU sensor runs hotter. Max is only the fallback
+        // when no sensor name gives itself away.
+        const temps = [];
+        // Filesystems and memory PICK the fullest, never sum - nested
+        // namespaces (ZFS datasets share pool space) make sums double-count.
+        let fs = null;
+        let mem = null;
         for (const e of auxEnts.all(d.id)) {
             const s = latest.get(e.id);
             if (!s || s.v0 == null) continue;
@@ -168,7 +184,22 @@ function deviceListSummaries() {
                 ups = { ...(ups || {}), chargePct: Math.round(s.v0) };
             } else if (e.kind === 'runtime') {
                 ups = { ...(ups || {}), runtimeS: Math.round(s.v0) };
+            } else if (e.kind === 'temp') {
+                temps.push({ name: e.name || '', c: s.v0 });
+            } else if (e.kind === 'fs' || e.kind === 'mem') {
+                if (s.v1 > 0) {
+                    const pct = s.v0 / s.v1 * 100;
+                    if (e.kind === 'fs') { if (!fs || pct > fs.pct) fs = { name: e.name || '', pct }; }
+                    else { if (!mem || pct > mem.pct) mem = { name: e.name || '', pct }; }
+                }
             }
+        }
+        let temp = null;
+        if (temps.length) {
+            const byName = (re) => temps.find((t) => re.test(t.name));
+            const pick = byName(/cpu|core|package/i) || byName(/system|board|ambient|chassis|intake/i)
+                || temps.reduce((a, b) => (b.c > a.c ? b : a));
+            temp = { name: pick.name, c: Math.round(pick.c), of: temps.length };
         }
         return {
             ...deviceSummary(d),
@@ -179,6 +210,10 @@ function deviceListSummaries() {
             worstIfErrs,
             health,
             ups,
+            temp,
+            fs,
+            mem,
+            vendorLabel: vendorLabelFor(d.vendor_key),
             sysLocation: d.sys_location || null
         };
     });

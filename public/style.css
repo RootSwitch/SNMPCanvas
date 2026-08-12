@@ -103,6 +103,10 @@ a:hover { text-decoration: underline; }
     margin: 0 auto;
     padding: 18px 16px 60px;
 }
+/* Wide layout (Columns panel toggle): spend the whole window on the data.
+   The centered 1100px column stays the default - it is the product's
+   homelab identity - wide is the opt-in for many columns on big screens. */
+body.wide #main { max-width: none; padding-left: 28px; padding-right: 28px; }
 
 .panel {
     background: var(--se-panel);

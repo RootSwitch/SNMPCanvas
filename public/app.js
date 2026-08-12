@@ -269,7 +269,11 @@
         errs: (d) => d.worstIfErrs ?? -1,
         health: (d) => d.health ? (d.health.state === 'alarm' ? 2 : 1) : 0,
         ups: (d) => (d.ups && d.ups.chargePct != null) ? d.ups.chargePct : -1,
-        location: (d) => (d.sysLocation || '').toLowerCase()
+        location: (d) => (d.sysLocation || '').toLowerCase(),
+        vendor: (d) => (d.vendorKey || 'zzz').toLowerCase(),
+        temp: (d) => d.temp ? d.temp.c : -999,
+        fs: (d) => d.fs ? d.fs.pct : -1,
+        mem: (d) => d.mem ? d.mem.pct : -1
     };
 
     // The fleet table's column registry. Status and Name are the row's
@@ -308,6 +312,24 @@
           cell: (d) => !d.ups ? '<span class="muted">N/A</span>'
               : `${d.ups.chargePct != null ? esc(String(d.ups.chargePct)) + '%' : ''}${d.ups.runtimeS != null ? `${d.ups.chargePct != null ? ' <span class="muted">&middot;</span> ' : ''}${fmtUptime(d.ups.runtimeS)}` : ''}`,
           title: 'Battery charge and estimated runtime, on devices that report them' },
+        { key: 'vendor', label: 'Vendor', sort: 'vendor',
+          cell: (d) => `<td${d.vendorLabel ? ` title="${esc(d.vendorLabel)}"` : ''}>${d.vendorKey ? esc(d.vendorKey) : '<span class="muted">N/A</span>'}</td>`,
+          raw: true, title: 'Matched vendor profile (drives the metric mappings); hover for the full name' },
+        { key: 'temp', label: 'Temp', th: 'num', sort: 'temp',
+          cell: (d) => d.temp
+              ? `<td class="num" title="${esc(d.temp.name)}${d.temp.of > 1 ? ` - preferred of ${d.temp.of} sensors (CPU/system beats hotter peripherals; open the device for all of them)` : ''}">${d.temp.c}&deg;C</td>`
+              : '<td class="num"><span class="muted">N/A</span></td>',
+          raw: true, title: 'Representative sensor: CPU/system/board preferred over hotter peripherals' },
+        { key: 'fs', label: 'Fullest FS', th: 'num', sort: 'fs',
+          cell: (d) => d.fs
+              ? `<td class="num" title="${esc(d.fs.name)}">${d.fs.pct >= 99.5 ? '100' : d.fs.pct.toFixed(0)}% <span class="muted">${esc(d.fs.name.length > 14 ? d.fs.name.slice(0, 13) + '…' : d.fs.name)}</span></td>`
+              : '<td class="num"><span class="muted">N/A</span></td>',
+          raw: true, title: 'The fullest monitored filesystem - a pick, never a sum, so nested/ZFS namespaces cannot double-count' },
+        { key: 'mem', label: 'Memory', th: 'num', sort: 'mem',
+          cell: (d) => d.mem
+              ? `<td class="num" title="${esc(d.mem.name)} - counts cache/buffers on many Linux agents, where high is healthy; trust trends more than the absolute number">${d.mem.pct.toFixed(0)}%</td>`
+              : '<td class="num"><span class="muted">N/A</span></td>',
+          raw: true, title: 'Used memory as the agent reports it - on many Linux agents this counts cache, where high is healthy' },
         { key: 'location', label: 'Location', sort: 'location',
           cell: (d) => `<td class="clip"${d.sysLocation ? ` title="${esc(d.sysLocation)}"` : ''}>${d.sysLocation ? esc(d.sysLocation) : '<span class="muted">N/A</span>'}</td>`,
           raw: true, title: 'SNMP sysLocation' },
@@ -328,6 +350,15 @@
         } catch (e) { /* fall through to default */ }
         return DEFAULT_COLS.slice();
     }
+
+    // Wide layout: a per-browser preference like the column set. The
+    // centered layout is the identity default; wide is for many columns on
+    // a big screen. Applied as a body class so every view inherits it.
+    function isWide() {
+        try { return localStorage.getItem('snmpcanvas-wide') === '1'; } catch (e) { return false; }
+    }
+    function applyWide() { document.body.classList.toggle('wide', isWide()); }
+    applyWide();
 
     async function renderDevices() {
         setNav('devices', true);
@@ -354,6 +385,8 @@
                 <button id="cols-btn" class="small" title="Choose which columns the table shows - a per-browser preference">Columns</button>
                 <div id="cols-panel" class="panel" style="display:none;position:absolute;right:0;top:110%;z-index:50;min-width:180px;padding:10px 12px">
                     ${DEVICE_COLS.map((c) => `<label style="display:block;padding:2px 0"><input type="checkbox" data-col="${c.key}" ${shownKeys.includes(c.key) ? 'checked' : ''}> ${c.label}</label>`).join('')}
+                    <hr style="border:none;border-top:1px solid var(--se-border);margin:8px 0">
+                    <label style="display:block;padding:2px 0" title="Let the table use the whole window width - for many columns on a big screen. The centered layout is the default."><input type="checkbox" id="wide-cb" ${isWide() ? 'checked' : ''}> Wide layout</label>
                 </div>
             </div>
             <button id="add-btn" class="btn-primary">+ Add device</button>
@@ -384,6 +417,10 @@
             colsPanel.style.display = colsPanel.style.display === 'none' ? 'block' : 'none';
         });
         colsPanel.addEventListener('click', (ev) => ev.stopPropagation());
+        document.getElementById('wide-cb').addEventListener('change', (ev) => {
+            try { localStorage.setItem('snmpcanvas-wide', ev.target.checked ? '1' : '0'); } catch (e) { /* ignore */ }
+            applyWide();
+        });
         for (const cb of colsPanel.querySelectorAll('input[data-col]')) {
             cb.addEventListener('change', () => {
                 const keys = [...colsPanel.querySelectorAll('input[data-col]:checked')].map((x) => x.dataset.col);
