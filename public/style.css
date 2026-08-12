@@ -243,8 +243,16 @@ table.list td {
 table.list tbody tr:last-child td { border-bottom: none; }
 table.list tbody tr.rowlink { cursor: pointer; }
 table.list tbody tr.rowlink:hover { background: var(--se-panel-2); }
-table.list td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.list td { white-space: nowrap; }
+table.list td.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.list th.num { text-align: right; }
+/* Free-text columns (name, interface, location) clip with an ellipsis
+   instead of wrapping the row taller or stretching the table - the full
+   value rides the cell's title tooltip. */
+table.list td.clip { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+/* A table wider than its panel scrolls INSIDE the panel instead of
+   running off the page - the price of showing every column at once. */
+.table-scroll { overflow-x: auto; }
 
 /* ===== Status dots & badges ===== */
 .dot {

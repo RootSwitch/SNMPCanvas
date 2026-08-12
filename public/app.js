@@ -285,7 +285,7 @@
         { key: 'cpu', label: 'CPU', th: 'num', sort: 'cpu',
           cell: (d, stale) => `<td class="num${stale ? ' muted' : ''}">${d.cpuPct == null ? '<span class="muted">N/A</span>' : esc(d.cpuPct.toFixed(0)) + '%'}</td>`, raw: true },
         { key: 'topif', label: 'Top interface', sort: null,
-          cell: (d, stale) => `<td class="${stale ? 'muted' : ''}">${d.topIf ? esc(d.topIf.name) : '<span class="muted">N/A</span>'}</td>`, raw: true },
+          cell: (d, stale) => `<td class="clip${stale ? ' muted' : ''}"${d.topIf ? ` title="${esc(d.topIf.name)}"` : ''}>${d.topIf ? esc(d.topIf.name) : '<span class="muted">N/A</span>'}</td>`, raw: true },
         { key: 'topbw', label: 'Top usage', th: 'num', sort: 'topbw',
           cell: (d, stale) => `<td class="num${stale ? ' muted' : ''}">${d.topIf && d.topIf.bps != null
               ? fmtBps(d.topIf.bps) + (d.topIf.pct != null ? ` <span class="muted">(${d.topIf.pct < 1 ? '<1' : esc(d.topIf.pct.toFixed(0))}%)</span>` : '')
@@ -309,8 +309,8 @@
               : `${d.ups.chargePct != null ? esc(String(d.ups.chargePct)) + '%' : ''}${d.ups.runtimeS != null ? `${d.ups.chargePct != null ? ' <span class="muted">&middot;</span> ' : ''}${fmtUptime(d.ups.runtimeS)}` : ''}`,
           title: 'Battery charge and estimated runtime, on devices that report them' },
         { key: 'location', label: 'Location', sort: 'location',
-          cell: (d) => d.sysLocation ? esc(d.sysLocation) : '<span class="muted">N/A</span>',
-          title: 'SNMP sysLocation' },
+          cell: (d) => `<td class="clip"${d.sysLocation ? ` title="${esc(d.sysLocation)}"` : ''}>${d.sysLocation ? esc(d.sysLocation) : '<span class="muted">N/A</span>'}</td>`,
+          raw: true, title: 'SNMP sysLocation' },
         { key: 'ifcount', label: 'Interfaces', th: 'num hide-sm', sort: 'ifcount', cell: (d) => String(d.interfaceCount) },
         { key: 'uptime', label: 'Uptime', th: 'num', sort: 'uptime', cell: (d) => fmtUptime(d.uptimeSeconds) },
         { key: 'lastpoll', label: 'Last poll', th: 'num hide-sm', sort: 'lastpoll',
@@ -358,7 +358,7 @@
             </div>
             <button id="add-btn" class="btn-primary">+ Add device</button>
         </div>
-        <div class="panel">
+        <div class="panel table-scroll">
         ${devices.length === 0 ? '<div class="muted">No devices yet - click <strong>Add device</strong> to poll your first one.</div>' : `
         <table class="list"><thead><tr>
             <th class="sortable" data-sort="status">Status${arrow('status')}</th>
@@ -370,7 +370,7 @@
             return `
             <tr class="rowlink" data-id="${d.id}" title="${esc((d.sysDescr || '').slice(0, 160))}">
                 <td>${dot(d.status)}${esc(d.status)}${d.enabled ? '' : ' <span class="badge">paused</span>'}</td>
-                <td><strong>${esc(d.name)}</strong></td>
+                <td class="clip" title="${esc(d.name)}"><strong>${esc(d.name)}</strong></td>
                 ${cols.map((c) => c.raw ? c.cell(d, stale) : `<td${c.th ? ` class="${c.th}"` : ''}>${c.cell(d, stale)}</td>`).join('')}
             </tr>`;
         }).join('')}
@@ -793,7 +793,7 @@
         ${d.sysDescr ? `<div class="muted small" style="margin:-8px 0 12px">${esc(d.sysDescr.slice(0, 220))}</div>` : ''}
         ${d.notes ? `<div class="notes-block">${esc(d.notes)}</div>` : ''}
         ${cards.length ? `<div class="cards">${cards.map(resourceCard).join('')}</div>` : ''}
-        <div class="panel">
+        <div class="panel table-scroll">
             <h2 style="display:flex;align-items:center;gap:10px">Interfaces
                 <span class="muted small">(${trackedCount} tracked${allIfs.length - trackedCount ? `, ${allIfs.length - trackedCount} untracked` : ''})</span>
                 <span style="flex:1"></span>
@@ -814,8 +814,8 @@
                     <td><input type="checkbox" class="export-cb" data-eid="${e.id}" ${e.export ? 'checked' : ''} ${e.tracked ? '' : 'disabled'}></td>
                     <td><span class="badge ${oper === 'up' ? 'up' : oper === 'down' ? 'down' : ''}">${oper}</span>
                         ${e.stale ? '<span class="badge stale" title="ifIndex may have moved - rediscover this device">stale</span>' : ''}</td>
-                    <td><strong>${esc(e.name)}</strong> ${codeChip(e.code)}</td>
-                    <td class="muted hide-sm">${esc(e.alias)}</td>
+                    <td class="clip" title="${esc(e.name)}"><strong>${esc(e.name)}</strong> ${codeChip(e.code)}</td>
+                    <td class="muted hide-sm clip"${e.alias ? ` title="${esc(e.alias)}"` : ''}>${esc(e.alias)}</td>
                     <td class="num">${fmtSpeed(e.speedBps)}${e.speedUntrusted ? ' <span class="badge stale" title="Advertised speed disproven by measured traffic (common on virtio / Hyper-V NICs) - utilization is suspended. Open the interface and set a speed override to restore it.">unrated</span>' : ''}${e.speedOverrideBps ? ' <span class="badge" title="Operator speed override - utilization uses this, not the advertised speed">set</span>' : ''}</td>
                     <td class="num">${e.tracked ? fmtBps(v[0]) : '-'}</td>
                     <td class="num">${e.tracked ? fmtBps(v[1]) : '-'}</td>
