@@ -107,6 +107,8 @@ function deviceSummary(d) {
         enabled: !!d.enabled, status: d.status, notes: d.notes || '',
         exportUptime: !!d.export_uptime, uptimeCode: d.uptime_code || null,
         lastPollTs: d.last_poll_ts, lastSeenTs: d.last_seen_ts,
+        osSummary: d.os_summary || null, hwModel: d.hw_model || null,
+        cpuCores: d.cpu_cores || null, ramKb: d.ram_kb || null,
         uptimeSeconds: uptimeSeconds(d),
         pollIntervalS: d.poll_interval_s, effectiveIntervalS: effectiveInterval(d)
     };
@@ -361,12 +363,15 @@ const routes = [
         if (Number.isNaN(interval)) return bad(res, 'Polling interval must be a number of seconds.');
 
         const deviceId = db.transaction(() => {
+            const idy = result.identity || {};
             const info = db.prepare(`INSERT INTO devices
-                (name, host, port, snmp_version, sys_descr, sys_object_id, sys_name, sys_location, vendor_key, poll_interval_s, created_ts, uptime_code)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                (name, host, port, snmp_version, sys_descr, sys_object_id, sys_name, sys_location, vendor_key, poll_interval_s, created_ts, uptime_code,
+                 os_summary, hw_model, cpu_cores, ram_kb)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                 .run(name, target.host, target.port, target.version, result.system.sysDescr,
                      result.system.sysObjectID, result.system.sysName, result.system.sysLocation, result.vendorKey, interval,
-                     Math.floor(Date.now() / 1000), generateIfCode(name, 'uptime'));
+                     Math.floor(Date.now() / 1000), generateIfCode(name, 'uptime'),
+                     idy.osSummary || null, idy.hwModel || null, idy.cpuCores || null, idy.ramKb || null);
             const id = info.lastInsertRowid;
             saveCredentials(id, target.creds);
             const ins = db.prepare(`INSERT INTO entities (device_id, kind, snmp_index, name, alias, speed_bps, extra, tracked, admin_status, oper_status, code)
@@ -496,8 +501,11 @@ const routes = [
         }
         const summary = { added: [], removed: [], updated: [] };
         db.transaction(() => {
-            db.prepare('UPDATE devices SET sys_descr = ?, sys_object_id = ?, sys_name = ?, sys_location = ?, vendor_key = ? WHERE id = ?')
-                .run(result.system.sysDescr, result.system.sysObjectID, result.system.sysName, result.system.sysLocation, result.vendorKey, d.id);
+            const idy = result.identity || {};
+            db.prepare(`UPDATE devices SET sys_descr = ?, sys_object_id = ?, sys_name = ?, sys_location = ?, vendor_key = ?,
+                        os_summary = ?, hw_model = ?, cpu_cores = ?, ram_kb = ? WHERE id = ?`)
+                .run(result.system.sysDescr, result.system.sysObjectID, result.system.sysName, result.system.sysLocation, result.vendorKey,
+                     idy.osSummary || null, idy.hwModel || null, idy.cpuCores || null, idy.ramKb || null, d.id);
             const existing = db.prepare('SELECT * FROM entities WHERE device_id = ?').all(d.id);
             const byKey = new Map(existing.map((e) => [`${e.kind}:${e.snmp_index}`, e]));
             const seen = new Set();

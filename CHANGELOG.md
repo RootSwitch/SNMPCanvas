@@ -2,6 +2,28 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Device identity: OS, Hardware, Cores and RAM columns.** Discovery (and
+  Rediscover) now collect a device's static identity: a per-family OS
+  summary distilled from the agent's own description ("Linux 6.17.2-1-pve
+  (Proxmox)", "Windows Server 2022 (build 20348)", "pfSense 2.8.1 (FreeBSD
+  15.0-CURRENT)", "TrueNAS 13.0-U6.8", "RouterOS 7.20.6" - the RouterOS
+  version comes from MikroTik's private OID, since sysDescr only carries
+  the model); a hardware model from the vendor's own identity OIDs
+  (MikroTik, APC UPS with SKU, APC PDU, UniFi, QNAP), ENTITY-MIB where
+  populated (Dell-style), the CPU model on plain hosts ("Intel(R) N150" -
+  with the junk strings agents actually emit filtered out: Windows'
+  "Unknown Processor Type", FreeBSD's floating-point guess), or the CPU
+  buried in TrueNAS's sysDescr; logical core count from hrProcessorTable;
+  and total RAM from hrMemorySize. Existing fleets backfill automatically:
+  a few seconds after startup, devices missing identity get a lightweight
+  fetch one at a time - no re-adding, no clicking Rediscover 27 times.
+  Every rule traces to a real device string from the operator's fleet and
+  walk archive, and every absence renders as N/A, never a guess.
+- **Wide layout no longer stretches graphs.** The entity history page keeps
+  the centered width even in wide mode - a chart carries a fixed point
+  budget, so full-bleed width was a Mega Graph, not more data. Tables
+  (device list, interface list) stay wide, where width means columns.
+
 - **Wide layout, and four more pickable columns.** A `Wide layout` toggle in
   the Columns panel lets the table spend the whole window width - the
   centered layout stays the default (the homelab look is deliberate; a

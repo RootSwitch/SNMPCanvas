@@ -55,8 +55,8 @@ written to a small JSON status file every cycle, for other tools to read.
   toggles keep big switches manageable.
 - **Pickable summary columns** - a Columns button on the device list adds
   down-port counts, worst interface errors/s, sensor health, UPS charge and
-  runtime, vendor, temperature, fullest filesystem, memory, or sysLocation
-  to the fleet table (per-browser preference; the default layout is
+  runtime, vendor, temperature, fullest filesystem, memory, OS, hardware
+  model, CPU cores, RAM, or sysLocation to the fleet table (per-browser preference; the default layout is
   unchanged). A Wide layout toggle spends the whole window on the table for
   many-column setups. Absent data shows as N/A, never as a guess.
 - **History graphs** - click any interface or resource card: traffic

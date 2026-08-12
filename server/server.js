@@ -7,7 +7,8 @@ const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { db, DATA_DIR } = require('./db');
+const { db, DATA_DIR, loadCredentials } = require('./db');
+const discover = require('./discover');
 const auth = require('./auth');
 const api = require('./api');
 const poller = require('./poller');
@@ -111,8 +112,34 @@ const server = tlsOptions ? https.createServer(tlsOptions, handler) : http.creat
 
 // seedFromEnv hashes (async), and nothing may accept a request before the
 // seed lands - an unclaimed setup page is the thing the seed exists to prevent.
+// One-time identity backfill: devices added before the identity columns
+// existed (or whose last fetch failed) get OS/hardware/cores/RAM filled in
+// the background, one device every few seconds so the fleet's agents never
+// see a thundering herd. Failures (a BMC that fights back, a device that is
+// down) are logged once and left NULL - honest N/A, retried next boot.
+function backfillIdentity() {
+    const missing = db.prepare(
+        "SELECT * FROM devices WHERE enabled = 1 AND os_summary IS NULL ORDER BY id").all();
+    if (!missing.length) return;
+    console.log(new Date().toISOString(), `[identity] backfilling ${missing.length} device(s)`);
+    let i = 0;
+    const next = () => {
+        if (i >= missing.length) return;
+        const d = missing[i++];
+        const target = { host: d.host, port: d.port, version: d.snmp_version, creds: loadCredentials(d.id) };
+        discover.fetchIdentityFor(target).then((idy) => {
+            db.prepare('UPDATE devices SET os_summary = ?, hw_model = ?, cpu_cores = ?, ram_kb = ? WHERE id = ?')
+                .run(idy.osSummary || null, idy.hwModel || null, idy.cpuCores || null, idy.ramKb || null, d.id);
+        }).catch((err) => {
+            console.log(new Date().toISOString(), `[identity] ${d.name} (${d.host}): ${err.message} - leaving N/A`);
+        }).finally(() => setTimeout(next, 3000));
+    };
+    next();
+}
+
 auth.seedFromEnv().then(() => {
     poller.start();
+    setTimeout(backfillIdentity, 15000);   // after the first poll wave settles
     server.listen(PORT, () => {
         console.log(new Date().toISOString(),
             `[server] SNMPCanvas listening on ${tlsOptions ? 'https' : 'http'}://0.0.0.0:${PORT}` +

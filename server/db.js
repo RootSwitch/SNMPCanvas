@@ -48,7 +48,14 @@ CREATE TABLE IF NOT EXISTS devices (
   last_seen_ts         INTEGER,
   last_sysuptime_cs    INTEGER,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
-  created_ts           INTEGER NOT NULL
+  created_ts           INTEGER NOT NULL,
+  -- Identity columns (Tier C): static facts collected at discovery /
+  -- rediscover / the startup backfill, never per-poll. NULL = the device
+  -- does not report it (rendered as N/A, never guessed).
+  os_summary           TEXT,
+  hw_model             TEXT,
+  cpu_cores            INTEGER,
+  ram_kb               INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS credentials (
@@ -189,6 +196,10 @@ if (!deviceCols.includes('notes')) db.exec('ALTER TABLE devices ADD COLUMN notes
 if (!deviceCols.includes('export_uptime')) db.exec('ALTER TABLE devices ADD COLUMN export_uptime INTEGER NOT NULL DEFAULT 0');
 if (!deviceCols.includes('uptime_code')) db.exec('ALTER TABLE devices ADD COLUMN uptime_code TEXT');
 if (!deviceCols.includes('sys_location')) db.exec('ALTER TABLE devices ADD COLUMN sys_location TEXT');
+if (!deviceCols.includes('os_summary')) db.exec('ALTER TABLE devices ADD COLUMN os_summary TEXT');
+if (!deviceCols.includes('hw_model')) db.exec('ALTER TABLE devices ADD COLUMN hw_model TEXT');
+if (!deviceCols.includes('cpu_cores')) db.exec('ALTER TABLE devices ADD COLUMN cpu_cores INTEGER');
+if (!deviceCols.includes('ram_kb')) db.exec('ALTER TABLE devices ADD COLUMN ram_kb INTEGER');
 
 const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
 if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');

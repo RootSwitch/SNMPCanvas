@@ -5,6 +5,116 @@
 
 const S = require('./snmp');
 const O = require('./oids');
+const IDY = require('./identity');
+
+// Identity OIDs - static facts fetched once per discovery (and by the
+// startup backfill), never per-poll. Sources verified against real walks
+// in the user's corpus; see identity.js for the per-family rules.
+const IDENT = {
+    hrMemorySize:        '1.3.6.1.2.1.25.2.2.0',
+    hrDeviceDescr:       '1.3.6.1.2.1.25.3.2.1.3',      // .<idx> per processor
+    entPhysicalDescr:    '1.3.6.1.2.1.47.1.1.1.1.2',
+    entPhysicalName:     '1.3.6.1.2.1.47.1.1.1.1.7',
+    entPhysicalModelName:'1.3.6.1.2.1.47.1.1.1.1.13',
+    mikrotikVersion:     '1.3.6.1.4.1.14988.1.1.7.7.0', // "7.20.6"
+    mikrotikModel:       '1.3.6.1.4.1.14988.1.1.7.9.0', // "CRS317-1G-16S+"
+    apcUpsModel:         '1.3.6.1.4.1.318.1.1.1.1.1.1.0',
+    apcUpsSku:           '1.3.6.1.4.1.318.1.1.1.1.2.5.0',
+    apcPduModel:         '1.3.6.1.4.1.318.1.1.12.1.5.0',
+    qnapModel:           '1.3.6.1.4.1.2076.81.1.1.0',
+    unifiModel:          '1.3.6.1.4.1.41112.1.6.3.3.0'
+};
+
+// Collect the identity block: OS summary, hardware model, cores, RAM.
+// Self-contained (walks hrProcessorLoad itself) so the startup backfill
+// can reuse it without a full probe. Everything is best-effort: a family
+// that reports nothing yields nulls, which render as N/A.
+async function collectIdentity(session, walkSession, system, vendorKey, warnings) {
+    const out = { osSummary: null, hwModel: null, cpuCores: null, ramKb: null };
+    const fam = IDY.familyOf(system.sysObjectID);
+
+    // Vendor-private identity first - it outranks everything.
+    let osVersion = null;
+    try {
+        if (vendorKey === 'mikrotik' || fam === 'routeros') {
+            const got = await S.get(session, [IDENT.mikrotikModel, IDENT.mikrotikVersion]);
+            const model = got.get(IDENT.mikrotikModel);
+            if (model != null && String(model).trim()) out.hwModel = String(model).trim();
+            if (got.get(IDENT.mikrotikVersion) != null) osVersion = String(got.get(IDENT.mikrotikVersion)).trim();
+        } else if (fam === 'apc') {
+            const got = await S.get(session, [IDENT.apcUpsModel, IDENT.apcUpsSku, IDENT.apcPduModel]);
+            const ups = got.get(IDENT.apcUpsModel), sku = got.get(IDENT.apcUpsSku), pdu = got.get(IDENT.apcPduModel);
+            const model = (ups != null && String(ups).trim()) ? String(ups).replace(/\s+/g, ' ').trim() : null;
+            const skuS = sku != null ? String(sku).trim() : '';
+            out.hwModel = model ? (skuS ? `${model} (${skuS})` : model)
+                : (pdu != null && String(pdu).trim() ? String(pdu).trim() : null);
+        } else if (fam === 'unifi') {
+            const got = await S.get(session, [IDENT.unifiModel]);
+            const m = got.get(IDENT.unifiModel);
+            out.hwModel = m != null && String(m).trim() ? String(m).trim()
+                : (String(system.sysDescr).split(/\s+/)[0] || null);
+        } else {
+            const got = await S.get(session, [IDENT.qnapModel]);
+            const q = got.get(IDENT.qnapModel);
+            if (q != null && String(q).trim()) out.hwModel = String(q).trim();
+        }
+    } catch (e) { /* private tree absent - fall through to the generic sources */ }
+
+    out.osSummary = IDY.summarizeOS(system.sysObjectID, system.sysDescr, osVersion);
+
+    // HOST-RESOURCES: cores from hrProcessorLoad rows, RAM from
+    // hrMemorySize, CPU model from the processor rows' hrDeviceDescr.
+    try {
+        const loads = await walkMap(walkSession, O.HR.hrProcessorLoad, warnings, 'hrProcessorLoad (identity)');
+        if (loads.size > 0) {
+            out.cpuCores = loads.size;
+            if (!out.hwModel) {
+                const idx = [...loads.keys()].slice(0, 4);
+                const got = await S.get(session, idx.map((i) => `${IDENT.hrDeviceDescr}.${i}`));
+                for (const v of got.values()) {
+                    const m = IDY.cleanCpuModel(v);
+                    if (m) { out.hwModel = m; break; }
+                }
+            }
+        }
+        const mem = await S.get(session, [IDENT.hrMemorySize]);
+        const kb = Number(mem.get(IDENT.hrMemorySize));
+        if (Number.isFinite(kb) && kb > 0) out.ramKb = Math.round(kb);
+    } catch (e) { /* no HOST-RESOURCES - gear, not a host */ }
+
+    // TrueNAS carries the CPU model inside sysDescr's Hardware: section.
+    if (!out.hwModel && fam === 'truenas') out.hwModel = IDY.cpuFromTrueNasDescr(system.sysDescr);
+
+    // ENTITY-MIB fallback (the Dells fill entPhysicalName; most hosts and
+    // virtual gear have nothing here, and that is an honest nothing).
+    if (!out.hwModel) {
+        try {
+            const models = await walkMap(walkSession, IDENT.entPhysicalModelName, warnings, 'entPhysicalModelName');
+            const names = models.size ? null : await walkMap(walkSession, IDENT.entPhysicalName, warnings, 'entPhysicalName');
+            out.hwModel = IDY.pickEntityModel(models, names, null);
+        } catch (e) { /* no ENTITY-MIB */ }
+    }
+    if (out.hwModel) out.hwModel = out.hwModel.slice(0, 80);
+    if (out.osSummary) out.osSummary = out.osSummary.slice(0, 80);
+    return out;
+}
+
+// Light identity-only fetch for the startup backfill: system group +
+// collectIdentity, no table walks, no entity reconciliation.
+async function fetchIdentityFor(target) {
+    const session = S.createSession(target);
+    try {
+        const sys = await S.get(session, [O.SYS.sysDescr, O.SYS.sysObjectID]);
+        const system = {
+            sysDescr: sys.get(O.SYS.sysDescr) != null ? String(sys.get(O.SYS.sysDescr)) : '',
+            sysObjectID: sys.get(O.SYS.sysObjectID) != null ? String(sys.get(O.SYS.sysObjectID)) : ''
+        };
+        const vendor = O.matchVendor(system.sysObjectID, system.sysDescr);
+        return await collectIdentity(session, session, system, vendor ? vendor.key : null, []);
+    } finally {
+        S.closeQuietly(session);
+    }
+}
 
 // Filesystems that are usually noise (tmpfs mounts net-snmp mislabels as
 // FixedDisk, TrueNAS system-dataset internals, ZFS snapshot mounts).
@@ -536,11 +646,12 @@ async function probe(target) {
                 '(the stock RHEL/Rocky snmpd.conf does this -- widen the "view systemview" lines in /etc/snmp/snmpd.conf).');
         }
 
-        return { system, vendorKey: vendor ? vendor.key : null, entities, warnings };
+        const identity = await collectIdentity(session, walkSession, system, vendor ? vendor.key : null, warnings);
+        return { system, vendorKey: vendor ? vendor.key : null, entities, warnings, identity };
     } finally {
         S.closeQuietly(session);
         if (v1Session) S.closeQuietly(v1Session);
     }
 }
 
-module.exports = { probe };
+module.exports = { probe, fetchIdentityFor };

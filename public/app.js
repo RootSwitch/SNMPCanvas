@@ -273,7 +273,11 @@
         vendor: (d) => (d.vendorKey || 'zzz').toLowerCase(),
         temp: (d) => d.temp ? d.temp.c : -999,
         fs: (d) => d.fs ? d.fs.pct : -1,
-        mem: (d) => d.mem ? d.mem.pct : -1
+        mem: (d) => d.mem ? d.mem.pct : -1,
+        os: (d) => (d.osSummary || 'zzz').toLowerCase(),
+        hw: (d) => (d.hwModel || 'zzz').toLowerCase(),
+        cores: (d) => d.cpuCores ?? -1,
+        ram: (d) => d.ramKb ?? -1
     };
 
     // The fleet table's column registry. Status and Name are the row's
@@ -330,6 +334,18 @@
               ? `<td class="num" title="${esc(d.mem.name)} - counts cache/buffers on many Linux agents, where high is healthy; trust trends more than the absolute number">${d.mem.pct.toFixed(0)}%</td>`
               : '<td class="num"><span class="muted">N/A</span></td>',
           raw: true, title: 'Used memory as the agent reports it - on many Linux agents this counts cache, where high is healthy' },
+        { key: 'os', label: 'OS', sort: 'os',
+          cell: (d) => `<td class="clip"${d.osSummary ? ` title="${esc(d.osSummary)}"` : ''}>${d.osSummary ? esc(d.osSummary) : '<span class="muted">N/A</span>'}</td>`,
+          raw: true, title: 'Summarized from the agent&#39;s own description at discovery; use Rediscover after upgrades' },
+        { key: 'hw', label: 'Hardware', sort: 'hw',
+          cell: (d) => `<td class="clip"${d.hwModel ? ` title="${esc(d.hwModel)}"` : ''}>${d.hwModel ? esc(d.hwModel) : '<span class="muted">N/A</span>'}</td>`,
+          raw: true, title: 'Model from the vendor&#39;s own identity OIDs, ENTITY-MIB, or the CPU on plain hosts; N/A = the device does not report one' },
+        { key: 'cores', label: 'Cores', th: 'num', sort: 'cores',
+          cell: (d) => d.cpuCores != null ? String(d.cpuCores) : '<span class="muted">N/A</span>',
+          title: 'Logical processors the agent reports (hrProcessorTable rows)' },
+        { key: 'ram', label: 'RAM', th: 'num', sort: 'ram',
+          cell: (d) => d.ramKb != null ? fmtBytes(d.ramKb * 1024) : '<span class="muted">N/A</span>',
+          title: 'Total physical memory the agent reports (hrMemorySize)' },
         { key: 'location', label: 'Location', sort: 'location',
           cell: (d) => `<td class="clip"${d.sysLocation ? ` title="${esc(d.sysLocation)}"` : ''}>${d.sysLocation ? esc(d.sysLocation) : '<span class="muted">N/A</span>'}</td>`,
           raw: true, title: 'SNMP sysLocation' },
