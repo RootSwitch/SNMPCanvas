@@ -364,4 +364,4 @@ function loadCredentials(deviceId) {
     return row;
 }
 
-module.exports = { db, DATA_DIR, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode };
+module.exports = { db, DATA_DIR, DB_FILE, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode };

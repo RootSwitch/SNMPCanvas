@@ -1419,6 +1419,20 @@
     }
 
     // ===== settings =====
+    // The consequence line under the retention input: the policy says how long
+    // history is KEPT, this says what that actually holds and costs. "Days
+    // held" is the number people otherwise reverse-engineer by scrolling a
+    // chart back until it goes blank.
+    function historyLine(h, retentionDays) {
+        if (!h || h.heldDays == null) return 'No history stored yet.';
+        if (h.bytesPerDay == null) return `History on disk: ${fmtBytes(h.dbBytes)}, collecting for under an hour - too early to project.`;
+        const days = (d) => d >= 10 ? String(Math.round(d)) : d.toFixed(1);
+        const base = `History on disk: ${fmtBytes(h.dbBytes)} spanning ${days(h.heldDays)} day${h.heldDays >= 1.95 ? 's' : ''} (about ${fmtBytes(h.bytesPerDay)}/day).`;
+        return h.steady
+            ? `${base} The ${retentionDays}-day window is full, so this is its steady size.`
+            : `${base} At ${retentionDays} days it levels off near ${fmtBytes(h.projectedBytes)}.`;
+    }
+
     async function renderSettings() {
         setNav('settings', true);
         const s = await GET('/api/settings');
@@ -1430,7 +1444,8 @@
                 <label>Global polling interval</label>
                 <span><input type="number" id="s-interval" value="${s.pollIntervalS}" min="30" style="width:110px"> seconds</span>
                 <label>History retention</label>
-                <span><input type="number" id="s-retention" value="${s.retentionDays}" min="1" style="width:110px"> days (pruned nightly at 03:30)</span>
+                <span><input type="number" id="s-retention" value="${s.retentionDays}" min="1" style="width:110px"> days (pruned nightly at 03:30)
+                    <div class="muted small" style="margin-top:4px" title="Scaled from what is on disk now, including indexes, the hourly rollup and the write-ahead log. Assumes the current fleet, tracked entities and polling interval held for the whole window.">${historyLine(s.history, s.retentionDays)}</div></span>
                 <label>Poll concurrency</label>
                 <span><input type="number" id="s-concurrency" value="${s.pollConcurrency}" min="1" max="512" style="width:110px"
                     ${s.poller && s.poller.concurrencySource === 'env' ? 'disabled' : ''}> devices polled at once

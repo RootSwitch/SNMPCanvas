@@ -2,6 +2,19 @@
 
 ## Unreleased (since 1.0.0)
 
+- **The retention setting now states its consequence, not just its policy.**
+  Under the History Retention input, Settings shows what the window actually
+  holds: database size on disk, how many days of history it currently spans
+  (the number you otherwise reverse-engineer by scrolling a chart back until
+  it goes blank), the measured growth per day, and what the configured window
+  will level off at - so changing the number shows what it buys before you
+  commit to it. The projection scales the real file, so it includes indexes,
+  the hourly rollup and WAL overhead without pretending to model them. Under
+  an hour of data, it says so instead of projecting noise. There is no hidden
+  row cap behind this - retention is time-based only, which is honest for
+  SNMP: the write rate is deterministic (entities x polls per day), unlike
+  syslog where a row cap guards against log floods.
+
 - **Visible, adjustable auto-refresh - and refreshing stops stealing your
   scroll.** The device list (and device detail page) refresh interval is
   now a dropdown in the page head: 30s (the previous, undocumented

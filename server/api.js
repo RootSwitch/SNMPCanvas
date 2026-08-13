@@ -7,7 +7,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { db, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode, DATA_DIR } = require('./db');
+const { db, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode, DATA_DIR, DB_FILE } = require('./db');
 const auth = require('./auth');
 const themeFile = require('./theme');
 const discover = require('./discover');
@@ -33,6 +33,51 @@ function exportPathError(v) {
         return 'Export path may not write inside the application directory - use the data folder or a mounted export volume.';
     }
     return null;
+}
+
+// --- history cost readout -----------------------------------------------
+// The Settings page states the retention POLICY; these three functions state
+// its CONSEQUENCE: what is on disk, how many days it actually spans, and what
+// the configured window will cost at the current rate. The projection scales
+// the real file rather than modelling bytes-per-row - that way it includes
+// indexes, the hourly rollup, free pages and WAL amplification without
+// pretending to know any of them individually.
+
+function dbSizeBytes() {
+    // page_count * page_size is the main file exactly; the WAL rides on top
+    // and is real disk until the next checkpoint. -shm is a fixed 32KB map.
+    let bytes = db.pragma('page_count', { simple: true }) * db.pragma('page_size', { simple: true });
+    try { bytes += fs.statSync(DB_FILE + '-wal').size; } catch (_) { /* no WAL between checkpoints */ }
+    return bytes;
+}
+
+function oldestSampleTs() {
+    // samples is keyed (entity_id, ts), so a bare MIN(ts) is a full table
+    // scan - minutes of blocked event loop on a big fleet. One index seek per
+    // entity is microseconds each; the prune walks entities the same way.
+    const minTs = db.prepare('SELECT MIN(ts) AS m FROM samples WHERE entity_id = ?');
+    let oldest = null;
+    for (const { id } of db.prepare('SELECT id FROM entities').all()) {
+        const m = minTs.get(id).m;
+        if (m != null && (oldest == null || m < oldest)) oldest = m;
+    }
+    return oldest;
+}
+
+function historySummary(dbBytes, oldestTs, retentionDays, nowS) {
+    const heldDays = oldestTs != null ? (nowS - oldestTs) / 86400 : null;
+    if (heldDays == null || heldDays < 1 / 24 || !(dbBytes > 0)) {
+        // Nothing stored, or under an hour of it: a rate scaled from minutes
+        // of data would be noise dressed as a projection. Honest nulls.
+        return { dbBytes: dbBytes || 0, heldDays, bytesPerDay: null, projectedBytes: null, steady: false };
+    }
+    const bytesPerDay = dbBytes / heldDays;
+    return {
+        dbBytes, heldDays, bytesPerDay,
+        projectedBytes: Math.round(bytesPerDay * retentionDays),
+        // Once the span reaches the window, the nightly prune holds it here.
+        steady: heldDays >= retentionDays
+    };
 }
 
 // --- probe tokens: creds from a successful probe are held server-side for a
@@ -741,7 +786,9 @@ const routes = [
             exportError: exporter.getLastError(),
             dataDir: DATA_DIR,
             credentialEncryption: !!process.env.SNMPCANVAS_SECRET,
-            poller: poller.health()
+            poller: poller.health(),
+            history: historySummary(dbSizeBytes(), oldestSampleTs(),
+                parseInt(getSetting('retention_days'), 10) || 90, Math.floor(Date.now() / 1000))
         });
     } },
 
@@ -859,4 +906,4 @@ function readJson(req, limit = 1024 * 1024) {
     });
 }
 
-module.exports = { handle, deviceListSummaries };
+module.exports = { handle, deviceListSummaries, historySummary, oldestSampleTs };
