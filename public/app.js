@@ -391,7 +391,7 @@
     async function renderDevices() {
         setNav('devices', true);
         $main.dataset.view = 'devices';
-        const { devices } = await GET('/api/devices');
+        const { devices, poller: ph } = await GET('/api/devices');
         const val = SORT_VALUE[deviceSort.key] || SORT_VALUE.name;
         devices.sort((a, b) => {
             const x = val(a), y = val(b);
@@ -423,6 +423,10 @@
             </div>
             <button id="add-btn" class="btn-primary">+ Add device</button>
         </div>
+        ${ph && ph.behind ? `<div class="warn-text small" style="margin-bottom:10px"
+            title="Slow or unresponsive agents hold poll slots for whole timeouts, stretching the effective interval for everyone. Graphs stay correct, just coarser, until the loop catches up. Devices already marked down are not counted - they are deprioritized by design.">
+            Poll loop is behind: ${ph.overdueDevices} reachable device${ph.overdueDevices === 1 ? '' : 's'} past a full interval, worst ${Math.round(ph.worstLateS)}s overdue.
+            ${ph.concurrencySource === 'env' ? 'Raise the POLL_CONCURRENCY environment variable' : 'Raise Poll concurrency in Settings'} (currently ${ph.concurrency}).</div>` : ''}
         <div class="panel table-scroll">
         ${devices.length === 0 ? '<div class="muted">No devices yet - click <strong>Add device</strong> to poll your first one.</div>' : `
         <table class="list"><thead><tr>

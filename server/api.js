@@ -373,7 +373,10 @@ const routes = [
     } },
 
     { method: 'GET', path: /^\/api\/devices$/, handler: (req, res) => {
-        ok(res, { devices: deviceListSummaries() });
+        // Poller health rides along so the page people actually watch can
+        // say when the loop is behind - the Settings page already warns, but
+        // a warning on a page nobody visits daily protected nobody.
+        ok(res, { devices: deviceListSummaries(), poller: poller.health() });
     } },
 
     { method: 'POST', path: /^\/api\/devices\/probe$/, handler: async (req, res, p, body) => {
@@ -523,7 +526,11 @@ const routes = [
         db.transaction(() => {
             const ids = db.prepare('SELECT id FROM entities WHERE device_id = ?').all(d.id);
             const del = db.prepare('DELETE FROM samples WHERE entity_id = ?');
-            for (const row of ids) del.run(row.id);
+            // samples_hourly must go here too: the nightly prune iterates
+            // EXISTING entities, so rollup rows orphaned by a delete would
+            // otherwise be invisible to every cleanup path, forever.
+            const delHourly = db.prepare('DELETE FROM samples_hourly WHERE entity_id = ?');
+            for (const row of ids) { del.run(row.id); delHourly.run(row.id); }
             db.prepare('DELETE FROM devices WHERE id = ?').run(d.id); // cascades credentials + entities
         })();
         poller.deviceRemoved(d.id);

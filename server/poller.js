@@ -588,8 +588,29 @@ function maybePrune() {
     setImmediate(prune);
 }
 
+// History rows whose entity no longer exists - a device deleted before the
+// delete route cleaned samples_hourly, or any future path that forgets. The
+// per-entity prune below iterates EXISTING entities, so orphans are invisible
+// to it forever; this sweep is the idempotent guard. DISTINCT over the first
+// PK column is an index skip-scan, and the deletes ride the same index - no
+// full-table scan even on a large history.
+function sweepOrphanHistory() {
+    const live = new Set(db.prepare('SELECT id FROM entities').all().map((r) => r.id));
+    let removed = 0;
+    for (const table of ['samples', 'samples_hourly']) {
+        const owners = db.prepare(`SELECT DISTINCT entity_id AS e FROM ${table}`).all();
+        const del = db.prepare(`DELETE FROM ${table} WHERE entity_id = ?`);
+        for (const { e } of owners) {
+            if (!live.has(e)) removed += del.run(e).changes;
+        }
+    }
+    if (removed) log(`orphan sweep: ${removed} history rows for deleted entities removed`);
+    return removed;
+}
+
 function prune() {
     try {
+        sweepOrphanHistory();
         const retentionDays = parseInt(getSetting('retention_days'), 10) || 90;
         const cutoff = Math.floor(Date.now() / 1000) - retentionDays * 86400;
         const entityIds = db.prepare('SELECT id FROM entities').all().map((r) => r.id);
@@ -702,4 +723,4 @@ function setRollupMark(ts) {
       .run(String(ts));
 }
 
-module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged, speedTrustAndClamp };
+module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged, speedTrustAndClamp, sweepOrphanHistory };

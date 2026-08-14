@@ -2,6 +2,19 @@
 
 ## Unreleased (since 1.0.0)
 
+- **The "poll loop is behind" warning now appears on the Devices page** -
+  the page people actually watch - not just in the container log and on
+  Settings. It names the count, the worst lateness, and the fix (raise
+  Poll concurrency; or the environment variable, when that is what is in
+  force). Born from a fleet that ran stretched for two days while the
+  warning aged quietly in docker logs.
+- **Deleting a device no longer leaks its hourly rollup rows.** The delete
+  removed raw samples but not samples_hourly, and the nightly prune only
+  iterates entities that still exist - so a deleted device's rollup was
+  orphaned forever, invisible to every cleanup path. The delete now removes
+  both, and the prune gained an idempotent orphan sweep that also cleans up
+  after any install that already carries the leak.
+
 - **The retention setting now states its consequence, not just its policy.**
   Under the History Retention input, Settings shows what the window actually
   holds: database size on disk, how many days of history it currently spans

@@ -45,6 +45,21 @@ insS.run(2, now);
 check('oldest sample found across entities', oldestSampleTs() === now - 37 * DAY,
     String(oldestSampleTs()));
 
+// --- orphan sweep: history rows whose entity no longer exists ---
+// The per-entity prune iterates EXISTING entities, so a device deleted before
+// samples_hourly cleanup existed left rollup rows invisible to every cleanup
+// path. The sweep is the idempotent guard.
+const { sweepOrphanHistory } = require('../server/poller');
+insS.run(999, now - DAY);                    // orphan raw sample
+db.prepare('INSERT INTO samples_hourly (entity_id, hour_ts, n) VALUES (999, ?, 12)').run(now - DAY);
+db.prepare('INSERT INTO samples_hourly (entity_id, hour_ts, n) VALUES (1, ?, 12)').run(now - DAY);
+const swept = sweepOrphanHistory();
+check('orphan sweep removes history for deleted entities', swept === 2, String(swept));
+check('...and leaves live entities’ history alone',
+    db.prepare('SELECT count(*) n FROM samples_hourly WHERE entity_id = 1').get().n === 1
+    && db.prepare('SELECT count(*) n FROM samples WHERE entity_id = 1').get().n === 2);
+check('sweep is idempotent: second run finds nothing', sweepOrphanHistory() === 0);
+
 // --- historySummary (pure) ---
 const empty = historySummary(0, null, 90, now);
 check('no history: nulls, not zeros pretending to be data',
