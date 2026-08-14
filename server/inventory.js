@@ -28,13 +28,31 @@ function csvCell(v) {
 // (and their aliases) against the bundled stencil library.
 function guessStencil(d) {
     const hay = `${d.sys_descr || ''} ${d.sys_name || ''} ${d.name || ''}`.toLowerCase();
+    // MikroTik first, and on MODEL evidence only: everything they ship
+    // reports "RouterOS" - routers, switches, firewalls and APs alike - so
+    // the OS name proves nothing and the model prefix is the real signal
+    // (CRS = Cloud Router SWITCH). No recognizable model means blank, not
+    // a coin flip. From a downstream review that caught every CRS core
+    // switch exporting as a router because "routeros" sat in the router rule.
+    if (/routeros|mikrotik|\bswos\b/.test(hay)) {   // SwOS = their switch-only OS
+        if (/\bcrs|\bcss/.test(hay)) { return 'switch'; }
+        if (/\bccr|\brb\d|routerboard/.test(hay)) { return 'router'; }
+        if (/\bhap\b|\bwap\b|\bcap\b/.test(hay)) { return 'access point'; }
+        return '';
+    }
+    // Appliances before the operating systems they are built on: pfSense IS
+    // FreeBSD and TrueNAS IS FreeBSD, so the appliance keyword must claim
+    // the device before the OS keyword can call it a server.
     if (/\bfirewall\b|fortigate|palo ?alto|\basa\b|pfsense|opnsense/.test(hay)) { return 'firewall'; }
     if (/access ?point|\bap\b|wireless|\bwifi\b|wlan/.test(hay)) { return 'access point'; }
-    if (/\brouter\b|routeros|\bios[- ]?xe\b|\bvyos\b|mikrotik/.test(hay)) { return 'router'; }
-    if (/\bswitch\b|catalyst|switchos|procurve|\bnexus\b/.test(hay)) { return 'switch'; }
-    if (/\bserver\b|linux|windows|ubuntu|debian|freebsd|truenas|proxmox|esxi|vmware/.test(hay)) { return 'server'; }
-    if (/\bnas\b|synology|qnap/.test(hay)) { return 'nas'; }
+    if (/truenas|\bnas\b|synology|qnap/.test(hay)) { return 'nas'; }
     if (/\bups\b|\bpdu\b|smart-?ups/.test(hay)) { return 'ups'; }
+    // Switch before router: an L3 switch's sysDescr carries both "Catalyst"
+    // and "IOS XE", and the router rule matching ios-xe first turned every
+    // Catalyst 9000-class SWITCH into a router icon.
+    if (/\bswitch\b|catalyst|switchos|procurve|\bnexus\b/.test(hay)) { return 'switch'; }
+    if (/\brouter\b|\bios[- ]?xe\b|\bvyos\b/.test(hay)) { return 'router'; }
+    if (/\bserver\b|linux|windows|ubuntu|debian|freebsd|proxmox|esxi|vmware/.test(hay)) { return 'server'; }
     return '';
 }
 

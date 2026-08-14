@@ -2,6 +2,17 @@
 
 ## Unreleased (since 1.0.0)
 
+- **The inventory export's stencil guesser had three ordering bugs, all
+  fixed.** Every MikroTik CRS core switch exported as a router ("routeros"
+  sat in the router rule, but a CRS is a Cloud Router SWITCH - MikroTik is
+  now decided on model evidence, or left honestly blank); every TrueNAS box
+  exported as a server (appliance keywords now run before the operating
+  systems they are built on); and every Catalyst 9000-class switch exported
+  as a router (they run IOS-XE, which the router rule matched first - switch
+  now wins when both words appear). Found by a downstream port of this exact
+  function that measured it against real fleets; a new check tool pins all
+  three orderings with corpus-derived cases.
+
 - **The "poll loop is behind" warning now appears on the Devices page** -
   the page people actually watch - not just in the container log and on
   Settings. It names the count, the worst lateness, and the fix (raise
