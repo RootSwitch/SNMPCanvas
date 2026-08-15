@@ -588,23 +588,29 @@ function maybePrune() {
     setImmediate(prune);
 }
 
-// History rows whose entity no longer exists - a device deleted before the
-// delete route cleaned samples_hourly, or any future path that forgets. The
-// per-entity prune below iterates EXISTING entities, so orphans are invisible
-// to it forever; this sweep is the idempotent guard. DISTINCT over the first
-// PK column is an index skip-scan, and the deletes ride the same index - no
-// full-table scan even on a large history.
+// Rollup rows whose entity no longer exists - left behind by any device
+// deleted before the delete route learned to clean samples_hourly. The
+// per-entity prune below iterates EXISTING entities, so those rows are
+// invisible to it forever; this sweep is the idempotent guard.
+//
+// samples_hourly ONLY, deliberately. `samples` cannot hold orphans: device
+// deletion has always removed its rows inside the same transaction as the
+// device row, so either both are gone or neither is. Sweeping it anyway cost
+// a full table scan of the largest table in the database, every night, to
+// find nothing - EXPLAIN QUERY PLAN says SCAN samples, not the skip-scan the
+// first version of this comment claimed (93ms per 1.2M rows measured warm,
+// seconds on a real fleet, and it blocks the loop because better-sqlite3 is
+// synchronous). The rollup is ~1 row per entity per hour against 120 for
+// samples, so scanning it is the cheap 1% of that.
 function sweepOrphanHistory() {
     const live = new Set(db.prepare('SELECT id FROM entities').all().map((r) => r.id));
+    const owners = db.prepare('SELECT DISTINCT entity_id AS e FROM samples_hourly').all();
+    const del = db.prepare('DELETE FROM samples_hourly WHERE entity_id = ?');
     let removed = 0;
-    for (const table of ['samples', 'samples_hourly']) {
-        const owners = db.prepare(`SELECT DISTINCT entity_id AS e FROM ${table}`).all();
-        const del = db.prepare(`DELETE FROM ${table} WHERE entity_id = ?`);
-        for (const { e } of owners) {
-            if (!live.has(e)) removed += del.run(e).changes;
-        }
+    for (const { e } of owners) {
+        if (!live.has(e)) removed += del.run(e).changes;
     }
-    if (removed) log(`orphan sweep: ${removed} history rows for deleted entities removed`);
+    if (removed) log(`orphan sweep: ${removed} rollup rows for deleted entities removed`);
     return removed;
 }
 

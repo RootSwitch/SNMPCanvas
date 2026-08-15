@@ -2,6 +2,18 @@
 
 ## Unreleased (since 1.0.0)
 
+- **The orphan sweep no longer scans the samples table.** Yesterday's sweep
+  checked both history tables; the raw `samples` scan was a full table scan
+  (EXPLAIN QUERY PLAN says SCAN, not the skip-scan its comment claimed) of
+  the largest table in the database, run nightly, and it could never find
+  anything: device deletion removes those rows in the same transaction as
+  the device row, so they cannot orphan. Only the rollup could, which is why
+  it was the leak. Measured at 93ms per 1.2M rows warm - seconds on a real
+  fleet, and it blocks the event loop, which showed up in the field as a
+  one-off 262-second poll-scheduling stall in the same second the sweep ran.
+  The rollup holds roughly one row per entity per hour against 120 for
+  samples, so what remains is about 1% of the cost.
+
 - **The inventory export's stencil guesser had three ordering bugs, all
   fixed.** Every MikroTik CRS core switch exported as a router ("routeros"
   sat in the router rule, but a CRS is a Cloud Router SWITCH - MikroTik is

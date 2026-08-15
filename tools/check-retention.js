@@ -50,14 +50,20 @@ check('oldest sample found across entities', oldestSampleTs() === now - 37 * DAY
 // samples_hourly cleanup existed left rollup rows invisible to every cleanup
 // path. The sweep is the idempotent guard.
 const { sweepOrphanHistory } = require('../server/poller');
-insS.run(999, now - DAY);                    // orphan raw sample
+insS.run(999, now - DAY);                    // orphan RAW sample - deliberately left alone
 db.prepare('INSERT INTO samples_hourly (entity_id, hour_ts, n) VALUES (999, ?, 12)').run(now - DAY);
 db.prepare('INSERT INTO samples_hourly (entity_id, hour_ts, n) VALUES (1, ?, 12)').run(now - DAY);
 const swept = sweepOrphanHistory();
-check('orphan sweep removes history for deleted entities', swept === 2, String(swept));
-check('...and leaves live entities’ history alone',
-    db.prepare('SELECT count(*) n FROM samples_hourly WHERE entity_id = 1').get().n === 1
-    && db.prepare('SELECT count(*) n FROM samples WHERE entity_id = 1').get().n === 2);
+check('orphan sweep removes ROLLUP rows for deleted entities', swept === 1, String(swept));
+check('...and leaves live entities’ rollup alone',
+    db.prepare('SELECT count(*) n FROM samples_hourly WHERE entity_id = 1').get().n === 1);
+// The cost check, as an assertion rather than a comment: `samples` is the
+// largest table in the database and scanning it nightly found nothing by
+// construction (device deletion removes its rows in the same transaction as
+// the device row, so it cannot orphan). A planted raw orphan must SURVIVE -
+// if a future edit re-adds that scan, this fails and says why.
+check('samples is deliberately NOT scanned - it cannot orphan (transactional delete)',
+    db.prepare('SELECT count(*) n FROM samples WHERE entity_id = 999').get().n === 1);
 check('sweep is idempotent: second run finds nothing', sweepOrphanHistory() === 0);
 
 // --- historySummary (pure) ---
