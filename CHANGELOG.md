@@ -2,6 +2,15 @@
 
 ## Unreleased (since 1.0.0)
 
+- **README: which board binding survives what.** Annotations can bind by
+  `{code}`, `Device:ifName` or `Device:alias`, and they break in different
+  directions - a code survives the sanitized wall copy but not a rename or a
+  second instance; an alias survives renames, re-enumeration and rebuilds but
+  needs the full feed, since the wall copy strips the fields it resolves
+  through. Also states that codes are deterministic (a rebuild with the same
+  names reproduces the same codes, so copying the database preserves them) and
+  that a board file is therefore bound to one instance rather than to a fleet.
+
 - **The automatic re-index never untracks an interface.** Untracking is now
   opt-in and only the manual Rediscover asks for it. `tracked` is an
   operator-assigned field, and the automatic path runs moments after a reboot -

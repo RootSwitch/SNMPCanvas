@@ -549,6 +549,35 @@ label line or a connection annotation. Braces are required on labels and
 optional on annotations, so the braced form always works; text around the
 token is the board author's own (`Rx {K7Q2}` renders as `Rx ▼56M ▲32M`).
 
+**Codes or names: which binding survives what.** An annotation can bind three
+ways, and they fail in different directions - worth choosing deliberately
+before a board grows large.
+
+| binding | survives | breaks on |
+|---|---|---|
+| `{K7Q2}` (code) | sanitization - the **only** form the wall copy resolves | a device or interface **rename**, and a second SNMPCanvas instance |
+| `{core-sw1:Gi1/0/24}` (`Device:ifName`) | renames of the *device* only | the interface being renamed or renumbered by the agent |
+| `{core-sw1:Uplink to core}` (`Device:alias`) | renames, re-enumeration, rebuilds, and a second instance | the wall copy, which strips it - needs the **full** feed |
+
+The code is `md5(deviceName:entityName)`, so it is deterministic: rebuilding a
+database from scratch reproduces the **same** codes as long as the device and
+entity names are the same. What changes it is a *name* changing - an operator
+renaming a device, or an agent renumbering a NIC after a reboot so `ens18`
+becomes `ens19`. Because collisions are resolved per database, two SNMPCanvas
+instances discovering the same fleet can also mint different codes for the same
+port, so **a board file is bound to one instance, not to a fleet** (and a kiosk
+reads exactly one SNMP feed, so a wall is fed by one instance either way).
+
+`Device:alias` is the durable choice where it is available, because both halves
+are operator-assigned - the device name you typed and the port description set
+on the switch - and neither is derived from anything the machine renumbers. Its
+cost is that the wall copy deliberately removes the fields it needs.
+
+So, in practice: **a kiosk serving the sanitized wall copy should use `{code}`**,
+and the way to keep those codes across a host move is to copy `snmpcanvas.db`
+(plus `-wal` and `-shm`) rather than re-adding devices. **A board rendered
+against the full feed can use aliases** and stop caring about renames entirely.
+
 **The wall copy.** The full file is a complete inventory - sysNames, host
 addresses, interface names and aliases, for every monitored device whether or
 not it is drawn anywhere - and a kiosk wall serves its feed unauthenticated
