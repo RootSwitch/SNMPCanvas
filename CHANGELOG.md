@@ -2,6 +2,15 @@
 
 ## Unreleased (since 1.0.0)
 
+- **The automatic re-index never untracks an interface.** Untracking is now
+  opt-in and only the manual Rediscover asks for it. `tracked` is an
+  operator-assigned field, and the automatic path runs moments after a reboot -
+  exactly when a switch is most likely to answer with a partly-populated
+  ifTable. The existing guard covered "saw zero of a kind" but not "saw 4 of
+  48", so an unlucky probe could have silently stopped graphing ports somebody
+  chose, permanently: nothing ever sets tracked back to 1. The automatic path
+  flags the missing entity stale instead, which is visible without being
+  destructive.
 - **A renumbered SNMP instance no longer takes a device down.** After a reboot
   or a hardware change, an agent's HOST-RESOURCES instances can move, leaving
   the stored entity list naming something the device no longer has. A v2c

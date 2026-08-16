@@ -8,10 +8,12 @@
 const { db, generateIfCode } = require('./db');
 
 // d: the devices row. result: what discover.probe() returned.
-// Returns { added, removed, updated } - lists of human-readable changes.
+// opts.untrack: allow entities missing from the probe to be UNTRACKED. Opt-in
+// because `tracked` is operator-assigned - see the note at the prune below.
+// Returns { added, removed, updated, flagged } - human-readable change lists.
 // Callers own the follow-up (poller.deviceChanged, exporter.scheduleWrite).
-function reconcileDevice(d, result) {
-    const summary = { added: [], removed: [], updated: [] };
+function reconcileDevice(d, result, opts = {}) {
+    const summary = { added: [], removed: [], updated: [], flagged: [] };
     db.transaction(() => {
         const idy = result.identity || {};
         db.prepare(`UPDATE devices SET sys_descr = ?, sys_object_id = ?, sys_name = ?, sys_location = ?, vendor_key = ?,
@@ -48,12 +50,29 @@ function reconcileDevice(d, result) {
         // real decommission; "saw 0 of a kind that used to exist" is a failed
         // read for that class - keep it (the poller marks it stale, and the
         // user can remove a genuinely-dead entity by hand).
+        //
+        // Untracking is OPT-IN, because `tracked` is an OPERATOR-ASSIGNED
+        // field. A human pressing Rediscover has asked for the inventory to be
+        // re-judged; the automatic re-index has not. The kind guard above
+        // covers "saw 0 of a kind", but not "saw 4 of 48" - and the automatic
+        // path runs moments after a REBOOT, which is exactly when a switch is
+        // most likely to answer with a partly-populated ifTable. Untracking on
+        // that reading would silently stop graphing ports somebody chose, and
+        // nothing puts them back: a later probe finds the row and updates it,
+        // but never sets tracked to 1 again.
         const seenKinds = new Set(result.entities.map((e) => e.kind));
         for (const e of existing) {
             const key = `${e.kind}:${e.snmp_index}`;
-            if (!seen.has(key) && e.tracked && seenKinds.has(e.kind)) {
+            if (seen.has(key) || !e.tracked || !seenKinds.has(e.kind)) continue;
+            if (opts.untrack === true) {
                 db.prepare('UPDATE entities SET tracked = 0, export = 0, stale = 1 WHERE id = ?').run(e.id);
                 summary.removed.push(`${e.kind} ${e.name} (untracked, history kept)`);
+            } else {
+                // Not silence - flag it, so the page shows something is off and
+                // a human can decide. `stale` is the existing "this definition
+                // may be wrong" marker and costs nothing.
+                db.prepare('UPDATE entities SET stale = 1 WHERE id = ?').run(e.id);
+                summary.flagged.push(`${e.kind} ${e.name} (missing from probe, still tracked)`);
             }
         }
     })();

@@ -556,7 +556,9 @@ const routes = [
         } catch (err) {
             return json(res, 502, { error: err.message, code: err.code || 'snmp' });
         }
-        const summary = reconcile.reconcileDevice(d, result);
+        // Manual Rediscover: a human asked for the inventory to be re-judged,
+        // so this is the one path allowed to untrack what vanished.
+        const summary = reconcile.reconcileDevice(d, result, { untrack: true });
         poller.deviceChanged(d.id, true);
         ok(res, { summary, warnings: result.warnings });
     } },

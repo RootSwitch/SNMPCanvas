@@ -99,6 +99,36 @@ function fakeSession(dead) {
     check('an agent refusing every varbind terminates (evictions are bounded)',
         bounded === null || /NoSuchName/.test(bounded.message));
 
+    // --- untracking is opt-in ------------------------------------------
+    // The automatic re-index runs moments after a reboot, which is exactly
+    // when a switch may answer with a partly-populated ifTable. `tracked` is
+    // operator-assigned, so only a human-initiated Rediscover may retire an
+    // entity; the automatic path flags it and leaves it alone. Nothing ever
+    // re-tracks an entity, so a wrong untrack is permanent and silent.
+    const { db } = require('../server/db');
+    const { reconcileDevice } = require('../server/reconcile');
+    const now = Math.floor(Date.now() / 1000);
+    db.prepare("INSERT INTO devices (id, name, host, snmp_version, status, created_ts) VALUES (7, 'sw', '203.0.113.5', '2c', 'up', ?)").run(now);
+    const insEnt = db.prepare("INSERT INTO entities (id, device_id, kind, snmp_index, name, tracked, code) VALUES (?, 7, 'if', ?, ?, 1, ?)");
+    insEnt.run(71, '1', 'ge-0/0/1', 'D1');
+    insEnt.run(72, '2', 'ge-0/0/2', 'D2');   // the one a partial probe misses
+    // A probe that saw only interface 1 - the "saw 1 of 2" case the existing
+    // kind guard does NOT cover.
+    const partial = { system: {}, vendorKey: null, identity: {},
+        entities: [{ kind: 'if', snmpIndex: '1', name: 'ge-0/0/1', tracked: true, extra: {} }] };
+
+    const auto = reconcileDevice({ id: 7, name: 'sw' }, partial, { untrack: false });
+    const afterAuto = db.prepare('SELECT tracked, stale FROM entities WHERE id = 72').get();
+    check('automatic re-index does NOT untrack a missing entity',
+        afterAuto.tracked === 1, JSON.stringify(afterAuto));
+    check('...but flags it stale, so it is not silent',
+        afterAuto.stale === 1 && auto.flagged.length === 1, JSON.stringify(auto.flagged));
+
+    const manual = reconcileDevice({ id: 7, name: 'sw' }, partial, { untrack: true });
+    const afterManual = db.prepare('SELECT tracked FROM entities WHERE id = 72').get();
+    check('manual Rediscover DOES untrack it (a human asked)',
+        afterManual.tracked === 0 && manual.removed.length === 1, JSON.stringify(manual.removed));
+
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall drift checks passed');
     process.exit(failures ? 1 : 0);
 })();

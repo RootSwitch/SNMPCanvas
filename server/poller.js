@@ -656,10 +656,12 @@ async function runReindexQueue() {
                 const creds = loadCredentials(d.id);
                 if (!creds) continue;
                 const result = await discover.probe({ host: d.host, port: d.port, version: d.snmp_version, creds });
-                const summary = reconcileDevice(d, result);
-                const changed = summary.added.length + summary.removed.length + summary.updated.length;
+                // untrack:false - the automatic path may add and correct,
+                // never retire what an operator chose to track.
+                const summary = reconcileDevice(d, result, { untrack: false });
+                const changed = summary.added.length + summary.updated.length + summary.flagged.length;
                 log(`device ${d.id} (${d.host}) re-indexed: ${summary.added.length} added, ` +
-                    `${summary.removed.length} untracked, ${summary.updated.length} renamed`);
+                    `${summary.updated.length} renamed, ${summary.flagged.length} flagged missing`);
                 if (changed > 0) { deviceChanged(d.id, true); exporter.scheduleWrite(); }
             } catch (err) {
                 // Loud but not fatal: the next trigger tries again after the
