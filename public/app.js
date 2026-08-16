@@ -886,6 +886,15 @@
             ${data.entities.some((e) => e.kind !== 'if') ? '<button id="dev-sensors">Sensors</button>' : ''}
             <button id="dev-rediscover">Rediscover</button>
         </div>
+        ${d.lastError ? `<div class="warn-text small" style="margin:-8px 0 12px"
+            title="Recorded when the poll failed. It clears itself on the next clean poll.">
+            Last poll failed ${esc(fmtAgo(d.lastError.at))}: ${esc(d.lastError.message)}${d.lastError.phase === 'entities'
+                ? ' <strong>The device answered, then refused the metric read</strong> - its stored instance list is probably stale (a reboot or a hardware change renumbers them). A re-index has been queued automatically; Rediscover forces one now.'
+                : ''}</div>` : ''}
+            ${/* No addendum for a liveness failure: translateError already
+                  writes those messages for an operator to act on, and
+                  repeating "check the address" under a line that just said it
+                  is padding. Only the opaque case earns an explanation. */''}
         ${d.sysDescr ? `<div class="muted small" style="margin:-8px 0 12px">${esc(d.sysDescr.slice(0, 220))}</div>` : ''}
         ${d.notes ? `<div class="notes-block">${esc(d.notes)}</div>` : ''}
         ${cards.length ? `<div class="cards">${cards.map(resourceCard).join('')}</div>` : ''}

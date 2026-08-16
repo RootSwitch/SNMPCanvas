@@ -16,7 +16,7 @@
     "scripts": {
         "start": "node server/server.js",
         "mock-agent": "node tools/mock-agent.js",
-        "test": "node tools/check-export.js && node tools/check-history.js && node tools/check-concurrency.js && node tools/check-auth.js && node tools/check-decode-crash.js && node tools/check-sort.js && node tools/check-speed-trust.js && node tools/check-columns.js && node tools/check-identity.js && node tools/check-retention.js && node tools/check-stencil-guess.js && node tools/test-theme.js",
+        "test": "node tools/check-export.js && node tools/check-history.js && node tools/check-concurrency.js && node tools/check-auth.js && node tools/check-decode-crash.js && node tools/check-sort.js && node tools/check-speed-trust.js && node tools/check-columns.js && node tools/check-identity.js && node tools/check-retention.js && node tools/check-drift.js && node tools/check-stencil-guess.js && node tools/test-theme.js",
         "check-export": "node tools/check-export.js",
         "check-speed-trust": "node tools/check-speed-trust.js",
         "check-history": "node tools/check-history.js",

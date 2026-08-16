@@ -749,6 +749,44 @@ is rewritten in full on every poll. Treat absence as "not stale".
 
 ## Troubleshooting
 
+### A device goes down after a reboot, but snmpwalk against it works
+
+This is the classic **stale instance list**, and the symptom set is distinctive:
+the web UI shows the device down, a manual `snmpwalk` from the same host
+succeeds, restarting the SNMP service changes nothing, and a **Rediscover**
+fixes it instantly.
+
+The cause is that a poll asks for *exact instances* it discovered earlier -
+`hrProcessorLoad.6`, `hrStorageUsed.3` - while a walk only ever visits
+instances that currently exist. A reboot, a vCPU or memory change, or a NIC
+re-enumeration renumbers those instances, so the stored list names something
+the agent no longer has.
+
+What the agent does next depends on how modern it is:
+
+* A **v2c-native agent** returns `noSuchInstance` for that one varbind and
+  answers the rest. The metric reads N/A; nothing else is affected.
+* A **v1-era agent** answers with a PDU-level `NoSuchName` that fails the
+  *entire request*. Historically that took the whole device down.
+
+The Windows SNMP service is the usual v1-era case, for an architectural reason
+rather than a configuration one: its extension-subagent API predates v2c, so
+subagent DLLs can only return v1 error codes and the master agent forwards them
+inside v2c responses. Setting the device to v2c in SNMPCanvas does not change
+this - the device genuinely speaks v2c, but part of its answer is v1-shaped.
+
+SNMPCanvas now handles both. When an agent refuses a stored instance by name,
+that one varbind is dropped, the rest of the poll completes, the owning entity
+is flagged stale, and **a re-index is queued automatically** - the same
+reconcile a manual Rediscover runs. A reboot also queues one directly, since
+that is the moment instances are most likely to have moved. The device page
+shows the reason a poll failed and distinguishes "never answered" from
+"answered, then refused the metric read", which are the two cases that used to
+look identical.
+
+If you want to force it immediately rather than wait for the queue, press
+**Rediscover** on the device page.
+
 ### A poll times out and nothing says why
 
 **A timeout can be masking a socket-level error**, and on a large fleet that is

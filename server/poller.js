@@ -11,6 +11,10 @@ const O = require('./oids');
 const { db, getSetting, loadCredentials } = require('./db');
 const auth = require('./auth');
 const exporter = require('./exporter');
+const discover = require('./discover');
+// Named import: `reconcile` is already a function here (the poll SCHEDULE
+// reconciler), and two different reconciles in one file is a trap.
+const { reconcileDevice } = require('./reconcile');
 
 const TICK_MS = 5000;
 // A slot is not a worker - it is one outstanding UDP request. Slots spend
@@ -256,7 +260,7 @@ async function pollDevice(device) {
         try {
             sys = await S.get(session, [O.SYS.sysUpTime, O.SYS.sysName]);
         } catch (err) {
-            recordFailure(device, nowS, err);
+            recordFailure(device, nowS, err, 'liveness');
             return;
         }
         const uptimeCs = Number(sys.get(O.SYS.sysUpTime) ?? 0);
@@ -314,13 +318,30 @@ async function pollDevice(device) {
         }
 
         let values = new Map();
+        const evicted = [];
         if (oidList.length > 0) {
             try {
-                values = await S.getMany(session, oidList);
+                values = await S.getMany(session, oidList, 25, evicted);
             } catch (err) {
-                recordFailure(device, nowS, err);
+                recordFailure(device, nowS, err, 'entities');
                 return;
             }
+        }
+        // An evicted OID means the agent refused a varbind we asked for by
+        // name - the stored instance no longer exists on the device. Flag the
+        // owning entity and repair the definition, rather than paying an extra
+        // round trip for the same dead instance on every poll forever.
+        if (evicted.length > 0) {
+            const ownerOf = new Map();
+            for (const job of jobs) for (const oid of Object.values(job.oids)) ownerOf.set(oid, job.entity);
+            const names = new Set();
+            const mark = db.prepare('UPDATE entities SET stale = 1 WHERE id = ?');
+            for (const oid of evicted) {
+                const owner = ownerOf.get(oid);
+                if (owner) { mark.run(owner.id); names.add(owner.name); }
+            }
+            log(`${device.host}: agent refused ${evicted.length} stored instance(s) (${[...names].join(', ') || 'unknown'}) - kept polling the rest, re-indexing`);
+            requestReindex(device, 'instances refused');
         }
 
         // 3. Compute samples.
@@ -430,7 +451,12 @@ async function pollDevice(device) {
 
         // 4. Persist everything in one transaction.
         persistPoll(device, nowS, uptimeCs, rows, updates);
-        if (rebooted) log(`device ${device.id} (${device.host}) rebooted - counter deltas discarded this cycle`);
+        if (rebooted) {
+            log(`device ${device.id} (${device.host}) rebooted - counter deltas discarded this cycle`);
+            // A reboot is the moment an agent renumbers its instances, so it
+            // is also the moment the stored entity list is most likely wrong.
+            requestReindex(device, 'device rebooted');
+        }
 
         // 5. Refresh the export file if any exported interface lives here.
         exporter.scheduleWrite();
@@ -561,20 +587,88 @@ function persistPoll(device, nowS, uptimeCs, rows, updates) {
         for (const u of updates) {
             updEntity.run({ oper_status: null, admin_status: null, alias: null, speed_bps: null, speed_untrusted: null, stale: null, ...u });
         }
+        // A clean poll clears the recorded reason too - a stale "why it went
+        // down" beside a device that is currently up is worse than no reason.
         db.prepare(`UPDATE devices SET status = 'up', last_poll_ts = ?, last_seen_ts = ?,
-                    last_sysuptime_cs = ?, consecutive_failures = 0 WHERE id = ?`)
+                    last_sysuptime_cs = ?, consecutive_failures = 0,
+                    last_error = NULL, last_error_ts = NULL, last_error_phase = NULL WHERE id = ?`)
             .run(nowS, nowS, uptimeCs, device.id);
     })();
 }
 
-function recordFailure(device, nowS, err) {
+// `phase` says WHICH read failed, and that distinction is the whole point:
+// 'liveness' means the device never answered at all (network, ACL, agent
+// down); 'entities' means it answered the system OIDs happily and then failed
+// the metric GET, which is what a stale entity list looks like from here.
+// Those need opposite responses and used to be one word, "down".
+function recordFailure(device, nowS, err, phase) {
     const failures = device.consecutive_failures + 1;
     const status = failures >= DOWN_AFTER_FAILURES ? 'down' : device.status;
-    db.prepare('UPDATE devices SET status = ?, last_poll_ts = ?, consecutive_failures = ? WHERE id = ?')
-        .run(status, nowS, failures, device.id);
+    db.prepare(`UPDATE devices SET status = ?, last_poll_ts = ?, consecutive_failures = ?,
+                last_error = ?, last_error_ts = ?, last_error_phase = ? WHERE id = ?`)
+        .run(status, nowS, failures, String(err.message || err), nowS, phase || null, device.id);
     if (status === 'down' && device.status !== 'down') {
-        log(`device ${device.id} (${device.host}) marked DOWN: ${err.message}`);
+        log(`device ${device.id} (${device.host}) marked DOWN during ${phase} read: ${err.message}`);
         exporter.scheduleWrite();
+    }
+    // A device that answers liveness but dies on its metric GET is describing
+    // a stale instance list, whatever the agent calls the error. Repair it
+    // rather than waiting for someone to notice and click Rediscover.
+    if (phase === 'entities') requestReindex(device, 'metric poll failed');
+}
+
+// --- automatic re-index -----------------------------------------------------
+// Three separate incidents pointed here, all the same shape: the stored entity
+// definition outlived the device's reality (a reboot renumbered HOST-RESOURCES
+// instances, a vCPU or memory change moved them, a NIC re-enumerated), and
+// only a hand-run Rediscover fixed it. The poller already DETECTS reboots - it
+// discards counter deltas on one - so it has the trigger and did nothing with
+// it.
+//
+// Deliberately conservative: one device at a time, a long per-device cooldown,
+// and every failure swallowed after logging. This is a repair path, not a
+// monitoring path - it must never be able to consume the poll loop, and a
+// device whose probe keeps failing must not be re-probed every cycle.
+const REINDEX_COOLDOWN_MS = 30 * 60 * 1000;
+const reindexLast = new Map();     // device id -> ms epoch of last attempt
+const reindexQueue = [];           // device ids awaiting a probe
+let reindexRunning = false;
+
+function requestReindex(device, reason) {
+    const last = reindexLast.get(device.id) || 0;
+    if (Date.now() - last < REINDEX_COOLDOWN_MS) return;
+    if (reindexQueue.includes(device.id)) return;
+    reindexLast.set(device.id, Date.now());
+    reindexQueue.push(device.id);
+    log(`device ${device.id} (${device.host}) queued for re-index: ${reason}`);
+    if (!reindexRunning) setImmediate(runReindexQueue);
+}
+
+async function runReindexQueue() {
+    if (reindexRunning) return;
+    reindexRunning = true;
+    try {
+        while (reindexQueue.length > 0) {
+            const id = reindexQueue.shift();
+            const d = db.prepare('SELECT * FROM devices WHERE id = ? AND enabled = 1').get(id);
+            if (!d) continue;
+            try {
+                const creds = loadCredentials(d.id);
+                if (!creds) continue;
+                const result = await discover.probe({ host: d.host, port: d.port, version: d.snmp_version, creds });
+                const summary = reconcileDevice(d, result);
+                const changed = summary.added.length + summary.removed.length + summary.updated.length;
+                log(`device ${d.id} (${d.host}) re-indexed: ${summary.added.length} added, ` +
+                    `${summary.removed.length} untracked, ${summary.updated.length} renamed`);
+                if (changed > 0) { deviceChanged(d.id, true); exporter.scheduleWrite(); }
+            } catch (err) {
+                // Loud but not fatal: the next trigger tries again after the
+                // cooldown, and the device keeps being polled meanwhile.
+                log(`device ${d.id} (${d.host}) re-index failed: ${err.message}`);
+            }
+        }
+    } finally {
+        reindexRunning = false;
     }
 }
 

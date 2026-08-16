@@ -164,12 +164,50 @@ function get(session, oids) {
     });
 }
 
+// The offending OID out of a PDU-level error, or null. net-snmp builds its
+// message as "<status>: <oid>" from the response's errorIndex, so the agent
+// has already named the varbind it choked on. Trusted only when that OID is
+// one we actually asked for in this chunk - a parse that finds anything else
+// is a parse that is wrong, and evicting on it would drop a live metric.
+function offendingOid(err, chunk) {
+    if (!err || err.code !== 'snmp') return null;   // timeouts/auth are not per-varbind
+    const m = /(\d+(?:\.\d+){3,})/.exec(String(err.message || ''));
+    return m && chunk.includes(m[1]) ? m[1] : null;
+}
+
+// A v1-era agent answers a GET containing one dead instance with a PDU-level
+// NoSuchName that fails the WHOLE request, where a v2c agent returns
+// noSuchInstance for that varbind and answers the rest. Windows is the common
+// case, for an architectural reason: its extension-subagent API predates v2c,
+// so subagent DLLs can only return v1 error codes and the master agent
+// forwards them inside v2c responses. One instance renumbering after a reboot
+// therefore took an entire device DOWN until someone ran Rediscover by hand.
+const MAX_EVICTIONS_PER_CHUNK = 6;
+
 // GET an arbitrarily long OID list, chunked into PDUs of `per` varbinds.
-async function getMany(session, oids, per = 25) {
+// `evicted` (optional) collects OIDs dropped to keep the request alive, so a
+// caller can flag the entities that own them; passing an array in rather than
+// changing the return type keeps the Map contract every caller already reads.
+async function getMany(session, oids, per = 25, evicted = null) {
     const out = new Map();
     for (let i = 0; i < oids.length; i += per) {
-        const part = await get(session, oids.slice(i, i + per));
-        for (const [k, v] of part) out.set(k, v);
+        let chunk = oids.slice(i, i + per);
+        for (let drops = 0; chunk.length > 0; drops++) {
+            try {
+                const part = await get(session, chunk);
+                for (const [k, v] of part) out.set(k, v);
+                break;
+            } catch (err) {
+                // Bounded, and it re-throws when it cannot name a culprit: an
+                // unexplained failure must still fail the poll loudly rather
+                // than quietly returning a partial reading as if it were whole.
+                const bad = drops < MAX_EVICTIONS_PER_CHUNK ? offendingOid(err, chunk) : null;
+                if (!bad) throw err;
+                if (evicted) evicted.push(bad);
+                out.set(bad, null);                 // absent, exactly like noSuchInstance
+                chunk = chunk.filter((o) => o !== bad);
+            }
+        }
     }
     return out;
 }
@@ -235,4 +273,4 @@ function closeQuietly(session) {
     try { session.close(); } catch (_) { /* already closed */ }
 }
 
-module.exports = { createSession, get, getMany, walkColumn, closeQuietly, AUTH_PROTOS, PRIV_PROTOS, LEVELS };
+module.exports = { createSession, get, getMany, walkColumn, closeQuietly, offendingOid, AUTH_PROTOS, PRIV_PROTOS, LEVELS };

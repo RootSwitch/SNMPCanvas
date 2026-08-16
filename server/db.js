@@ -200,6 +200,15 @@ if (!deviceCols.includes('os_summary')) db.exec('ALTER TABLE devices ADD COLUMN 
 if (!deviceCols.includes('hw_model')) db.exec('ALTER TABLE devices ADD COLUMN hw_model TEXT');
 if (!deviceCols.includes('cpu_cores')) db.exec('ALTER TABLE devices ADD COLUMN cpu_cores INTEGER');
 if (!deviceCols.includes('ram_kb')) db.exec('ALTER TABLE devices ADD COLUMN ram_kb INTEGER');
+// Why a poll failed, not just that it did. "down" covered two situations an
+// operator has to tell apart and could not: the host is unreachable, versus
+// the host answers fine and the METRIC poll dies (a stale entity list after a
+// reboot renumbered the agent's instances). The first needs the network
+// looked at, the second needs a Rediscover - and the log had the answer all
+// along while the page said only "down".
+if (!deviceCols.includes('last_error')) db.exec('ALTER TABLE devices ADD COLUMN last_error TEXT');
+if (!deviceCols.includes('last_error_ts')) db.exec('ALTER TABLE devices ADD COLUMN last_error_ts INTEGER');
+if (!deviceCols.includes('last_error_phase')) db.exec('ALTER TABLE devices ADD COLUMN last_error_phase TEXT');
 
 const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
 if (!entityCols.includes('code')) db.exec('ALTER TABLE entities ADD COLUMN code TEXT');

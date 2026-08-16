@@ -2,6 +2,23 @@
 
 ## Unreleased (since 1.0.0)
 
+- **A renumbered SNMP instance no longer takes a device down.** After a reboot
+  or a hardware change, an agent's HOST-RESOURCES instances can move, leaving
+  the stored entity list naming something the device no longer has. A v2c
+  agent answers `noSuchInstance` for that varbind and the poll carries on; a
+  v1-era agent - the Windows SNMP service, whose subagent API predates v2c -
+  fails the whole request with `NoSuchName`, which used to mark the device
+  down until someone ran Rediscover by hand. The refused varbind is now
+  dropped, the rest of the poll completes, the owning entity is flagged stale,
+  and a re-index is queued automatically. Reboot detection queues one too,
+  since that is when instances move. Eviction is bounded and never applies to
+  timeouts or auth failures, so an unexplained failure still fails loudly.
+- **The device page says why a poll failed.** "Down" covered two situations
+  that need opposite responses and looked identical: the device never answered
+  (network, ACL, agent stopped), versus it answered and then refused the
+  metric read (stale instance list). The reason and which read failed are now
+  recorded and shown, and clear themselves on the next clean poll.
+
 - **The orphan sweep no longer scans the samples table.** Yesterday's sweep
   checked both history tables; the raw `samples` scan was a full table scan
   (EXPLAIN QUERY PLAN says SCAN, not the skip-scan its comment claimed) of
