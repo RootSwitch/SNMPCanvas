@@ -2,6 +2,21 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Chart colors now mean something, and the legend shows them.** The series
+  palette was positional - every chart dealt the same four colors in slot
+  order - so a traffic graph drew its max lines in amber and red (a busy
+  uplink read as an emergency) while the errors chart drew Out errors in
+  green, the healthy color. Now hue is semantic: on value charts it says
+  which stream (in vs out) with the max line as a thinner, dimmer echo of its
+  own average; on the errors chart it says what the line means (red = errors,
+  amber = discards) with a dash for direction. Red on a graph is reserved for
+  "something is wrong". This also fixes the legend swatches, which rendered
+  gray on every theme: the swatch painted with `currentColor` but the series
+  classes only set SVG `stroke`, so the color fell through to the caption
+  text. Each class now sets `color:` and strokes with `currentColor`, meaning
+  the swatch and the line literally cannot disagree. The one hardcoded hex in
+  the old palette (Classic's amber, which never themed) is gone.
+
 - **README: which board binding survives what.** Annotations can bind by
   `{code}`, `Device:ifName` or `Device:alias`, and they break in different
   directions - a code survives the sanitized wall copy but not a rename or a

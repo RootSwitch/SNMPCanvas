@@ -3,7 +3,8 @@
 // classes bound to the --se-* theme variables, so charts re-theme instantly.
 //
 // Chart.render(container, {
-//   series: [{ label, cls ('a'|'b'|'c'|'d'), area, data: [[tsSec, value|null], ...] }],
+//   series: [{ label, cls, area, data: [[tsSec, value|null], ...] }],
+//     cls: a/b = in/out hue, a2/b2 = dimmed max echo, d/w = error/discard, d2/w2 = dashed out-direction (style.css)
 //   from, to        // seconds
 //   unit: 'bps' | 'pps' | 'pct' | 'bytes'
 // })

@@ -351,12 +351,25 @@ table.list td.clip { max-width: 190px; overflow: hidden; text-overflow: ellipsis
 .chart-svg { display: block; width: 100%; background: var(--se-input); border: 1px solid var(--se-border); border-radius: 6px; }
 .chart-grid-line { stroke: var(--se-border); stroke-width: 1; opacity: 0.55; }
 .chart-axis-label { fill: var(--se-txt-dim); font-size: 10px; font-family: inherit; }
-.chart-line-a { stroke: var(--se-accent); stroke-width: 1.5; fill: none; }
+/* Series palette. On value charts, hue says WHICH stream (accent = in,
+   series-out = out) and weight says avg vs max - the max line is the envelope
+   of its own average, so it draws as a quieter echo of the same hue, never a
+   different signal. On the errors chart, hue says what it MEANS (down =
+   errors, warn = discards) and the dash says direction. Red on these pages is
+   reserved for "something is wrong"; a busy uplink is not allowed to wear it.
+   Each class sets color: and strokes with currentColor so the HTML legend
+   swatches (background: currentColor) can only ever show the exact value the
+   SVG line draws with - the two cannot drift. */
+.chart-line-a { color: var(--se-accent); stroke: currentColor; stroke-width: 1.5; fill: none; }
 .chart-area-a { fill: var(--se-accent); opacity: 0.15; }
-.chart-line-b { stroke: var(--se-series-out); stroke-width: 1.5; fill: none; }
+.chart-line-a2 { color: var(--se-accent); stroke: currentColor; stroke-width: 1; opacity: 0.55; fill: none; }
+.chart-line-b { color: var(--se-series-out); stroke: currentColor; stroke-width: 1.5; fill: none; }
 .chart-area-b { fill: var(--se-series-out); opacity: 0.12; }
-.chart-line-c { stroke: #d9a92f; stroke-width: 1.3; fill: none; }
-.chart-line-d { stroke: var(--se-down); stroke-width: 1.3; fill: none; }
+.chart-line-b2 { color: var(--se-series-out); stroke: currentColor; stroke-width: 1; opacity: 0.55; fill: none; }
+.chart-line-d { color: var(--se-down); stroke: currentColor; stroke-width: 1.3; fill: none; }
+.chart-line-d2 { color: var(--se-down); stroke: currentColor; stroke-width: 1.3; stroke-dasharray: 4 3; fill: none; }
+.chart-line-w { color: var(--se-warn); stroke: currentColor; stroke-width: 1.3; fill: none; }
+.chart-line-w2 { color: var(--se-warn); stroke: currentColor; stroke-width: 1.3; stroke-dasharray: 4 3; fill: none; }
 .chart-cursor { stroke: var(--se-txt-dim); stroke-width: 1; stroke-dasharray: 3 3; }
 .chart-tip {
     position: absolute;

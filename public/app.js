@@ -1323,18 +1323,18 @@
                 yMax: scaleToLink && data.speedBps > 0 ? data.speedBps : undefined,
                 series: [
                     { label: 'In (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: 'In (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) },
+                    { label: 'In (max)', cls: 'a2', data: pts.map((p) => [p[0], p[2]]) },
                     { label: 'Out (avg)', cls: 'b', area: true, data: pts.map((p) => [p[0], p[3]]) },
-                    { label: 'Out (max)', cls: 'd', data: pts.map((p) => [p[0], p[4]]) }
+                    { label: 'Out (max)', cls: 'b2', data: pts.map((p) => [p[0], p[4]]) }
                 ]
             });
             chartBlock(wrap, 'Errors & discards', {
                 ...opts, unit: 'pps',
                 series: [
-                    { label: 'In errors', cls: 'a', data: pts.map((p) => [p[0], p[5]]) },
-                    { label: 'Out errors', cls: 'b', data: pts.map((p) => [p[0], p[6]]) },
-                    { label: 'In discards', cls: 'c', data: pts.map((p) => [p[0], p[7]]) },
-                    { label: 'Out discards', cls: 'd', data: pts.map((p) => [p[0], p[8]]) }
+                    { label: 'In errors', cls: 'd', data: pts.map((p) => [p[0], p[5]]) },
+                    { label: 'Out errors', cls: 'd2', data: pts.map((p) => [p[0], p[6]]) },
+                    { label: 'In discards', cls: 'w', data: pts.map((p) => [p[0], p[7]]) },
+                    { label: 'Out discards', cls: 'w2', data: pts.map((p) => [p[0], p[8]]) }
                 ]
             });
             const stripWrap = document.createElement('div');
@@ -1352,7 +1352,7 @@
                 ...opts, unit: 'degc',
                 series: [
                     { label: '°C (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: '°C (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                    { label: '°C (max)', cls: 'a2', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else if (kind === 'fan') {
@@ -1360,7 +1360,7 @@
                 ...opts, unit: 'rpm',
                 series: [
                     { label: 'RPM (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: 'RPM (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                    { label: 'RPM (max)', cls: 'a2', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else if (kind === 'power') {
@@ -1368,7 +1368,7 @@
                 ...opts, unit: 'w',
                 series: [
                     { label: 'Watts (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: 'Watts (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                    { label: 'Watts (max)', cls: 'a2', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else if (kind === 'gauge' || kind === 'battery') {
@@ -1376,7 +1376,7 @@
                 ...opts, unit: 'pct', yMax: 100,
                 series: [
                     { label: '% (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: '% (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                    { label: '% (max)', cls: 'a2', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else if (kind === 'outlet') {
@@ -1389,7 +1389,7 @@
                 ...opts, unit: 'dur',
                 series: [
                     { label: 'Runtime (avg)', cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: 'Runtime (max)', cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                    { label: 'Runtime (max)', cls: 'a2', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else if (kind === 'meter') {
@@ -1398,7 +1398,7 @@
                 ...opts, unit: u, yMax: data.meterMax || undefined,
                 series: [
                     { label: `${u || 'value'} (avg)`, cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: `${u || 'value'} (max)`, cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                    { label: `${u || 'value'} (max)`, cls: 'a2', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else if (kind === 'state') {
@@ -1409,7 +1409,7 @@
                 ...opts, unit: '', yMax: 1,
                 series: [
                     { label: `${alarm} (avg)`, cls: 'a', area: true, data: pts.map((p) => [p[0], p[1]]) },
-                    { label: `${alarm} (max)`, cls: 'c', data: pts.map((p) => [p[0], p[2]]) }
+                    { label: `${alarm} (max)`, cls: 'a2', data: pts.map((p) => [p[0], p[2]]) }
                 ]
             });
         } else {
