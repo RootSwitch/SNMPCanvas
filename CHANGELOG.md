@@ -2,6 +2,18 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Set an interface's real speed before anything goes wrong.** The speed
+  override existed but only appeared after the poller had convicted the
+  advertised figure. That ordering is fine for virtio fiction and wrong for
+  port-channels: a bond's claim is partial, not false - many agents
+  advertise one member's speed for the whole bundle - so a 2x1G link reads
+  100% busy at 1 Gb/s and trips utilization alerts at 40% real load, and a
+  lightly used 4x10G bundle might never carry enough to be disproven at all.
+  `set` now sits in every tracked interface row and on every interface page,
+  conviction or not. Link aggregations (ifType 161) are badged `LAG` so the
+  suspects are visible at discovery. Same PATCH endpoint, same override, same
+  precedence - just no longer gated behind a verdict it should not wait for.
+
 - **Chart colors now mean something, and the legend shows them.** The series
   palette was positional - every chart dealt the same four colors in slot
   order - so a traffic graph drew its max lines in amber and red (a busy

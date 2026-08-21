@@ -44,6 +44,19 @@
         if (!bps) return '-';
         return bps >= 1e9 ? (bps / 1e9) + ' G' : bps >= 1e6 ? (bps / 1e6) + ' M' : (bps / 1e3) + ' k';
     }
+    // ifType 161 (link aggregation). Informational, not a warning: the claim
+    // is usually one member's speed, which is where the set control comes in.
+    const LAG_BADGE = `<span class="badge" title="Link aggregation (ifType 161). Many devices advertise one member's speed for the whole bundle - a 2x1G bond claims 1G - so utilization reads too high until the real total is set">LAG</span>`;
+    // One prompt for both the interface table's `set` and the interface page.
+    // Returns bps, or null when cancelled / invalid (the user was told why).
+    function promptSpeedMbps(advertisedBps) {
+        const hint = advertisedBps ? ` Advertised: ${fmtSpeed(advertisedBps)}bps.` : '';
+        const raw = prompt(`Actual link speed in Mbps (e.g. 2000 for a 2x1G bond, 10000 for 10G).${hint} Blank cancels.`);
+        if (raw == null || raw.trim() === '') return null;
+        const mbps = Number(raw);
+        if (!Number.isFinite(mbps) || mbps <= 0) { alert('Enter a positive number of Mbps.'); return null; }
+        return Math.round(mbps * 1e6);
+    }
     function fmtUptime(sec) {
         if (sec == null) return '-';
         const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
@@ -921,7 +934,7 @@
                         ${e.stale ? '<span class="badge stale" title="ifIndex may have moved - rediscover this device">stale</span>' : ''}</td>
                     <td class="clip" title="${esc(e.name)}"><strong>${esc(e.name)}</strong> ${codeChip(e.code)}</td>
                     <td class="muted hide-sm clip"${e.alias ? ` title="${esc(e.alias)}"` : ''}>${esc(e.alias)}</td>
-                    <td class="num">${fmtSpeed(e.speedBps)}${e.speedUntrusted ? ' <span class="badge stale" title="Advertised speed disproven by measured traffic (common on virtio / Hyper-V NICs) - utilization is suspended. Open the interface and set a speed override to restore it.">unrated</span>' : ''}${e.speedOverrideBps ? ' <span class="badge" title="Operator speed override - utilization uses this, not the advertised speed">set</span>' : ''}</td>
+                    <td class="num">${fmtSpeed(e.speedBps)}${e.speedUntrusted ? ' <span class="badge stale" title="Advertised speed disproven by measured traffic (common on virtio / Hyper-V NICs) - utilization is suspended until the real speed is set">unrated</span>' : ''}${e.lag ? ' ' + LAG_BADGE : ''}${e.tracked ? `<button class="speed-set${e.speedOverrideBps ? ' active' : ''}" data-eid="${e.id}" data-adv="${e.advertisedBps || 0}" title="${e.speedOverrideBps ? `Override active: ${fmtSpeed(e.speedOverrideBps)}bps, advertised ${fmtSpeed(e.advertisedBps)}bps. Click to change; clear it from the interface page` : 'Set the real link speed - utilization divides by it instead of the advertised figure'}">set</button>` : ''}</td>
                     <td class="num">${e.tracked ? fmtBps(v[0]) : '-'}</td>
                     <td class="num">${e.tracked ? fmtBps(v[1]) : '-'}</td>
                     <td class="num hide-sm">${e.tracked ? ((v[2] ?? 0) + (v[3] ?? 0)).toFixed(2).replace(/^0\.00$/, '0') : '-'}</td>
@@ -945,6 +958,15 @@
             cb.addEventListener('change', async () => {
                 try { await api('PATCH', `/api/entities/${cb.dataset.eid}`, { export: cb.checked }); }
                 catch (e) { cb.checked = !cb.checked; alert(e.message); }
+            });
+        }
+        for (const btn of $main.querySelectorAll('.speed-set')) {
+            btn.addEventListener('click', async (ev) => {
+                ev.stopPropagation();           // the row itself navigates
+                const bps = promptSpeedMbps(Number(btn.dataset.adv));
+                if (!bps) return;
+                try { await api('PATCH', `/api/entities/${btn.dataset.eid}`, { speedOverrideBps: bps }); renderDevice(id); }
+                catch (e) { alert(e.message); }
             });
         }
         const filterInput = document.getElementById('if-filter');
@@ -1272,16 +1294,20 @@
                     title="Pin the traffic y-axis to the link speed (${fmtSpeed(data.speedBps)}bps) so the chart reads as utilization">Link scale</button>` : ''}
             </div>
         </div>
-        ${kind === 'if' && (data.speedUntrusted || data.speedOverrideBps) ? `
+        ${kind === 'if' ? `
         <div class="panel" id="speed-trust" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             ${data.speedOverrideBps
                 ? `<span>Speed override: <strong>${fmtSpeed(data.speedOverrideBps)}bps</strong></span>
-                   <span class="muted small">advertised ${fmtSpeed(data.advertisedBps)}bps</span>
+                   <span class="muted small">advertised ${fmtSpeed(data.advertisedBps)}bps</span>${data.lag ? ' ' + LAG_BADGE : ''}
+                   <button id="speed-set-btn" class="small">Change…</button>
                    <button id="speed-clear-btn" class="small">Clear override</button>`
-                : `<span class="badge stale">unrated</span>
+                : data.speedUntrusted
+                ? `<span class="badge stale">unrated</span>${data.lag ? ' ' + LAG_BADGE : ''}
                    <span class="muted">advertised ${fmtSpeed(data.advertisedBps)}bps was disproven by measured traffic - utilization and its alerts are suspended</span>
                    <button id="speed-set-btn" class="small">Set actual speed…</button>
-                   <button id="speed-trust-btn" class="small" title="Vouch for the advertised speed again; the poller will re-suspend it if traffic disproves it">Trust advertised</button>`}
+                   <button id="speed-trust-btn" class="small" title="Vouch for the advertised speed again; the poller will re-suspend it if traffic disproves it">Trust advertised</button>`
+                : `<span class="muted">Advertised <strong>${fmtSpeed(data.advertisedBps)}bps</strong></span>${data.lag ? ' ' + LAG_BADGE + ' <span class="muted small">bonds usually advertise one member, not the total</span>' : ''}
+                   <button id="speed-set-btn" class="small" title="Utilization divides by the number you set instead of the advertised figure. Does not wait for traffic to disprove the claim">Set actual speed…</button>`}
         </div>` : ''}
         <div id="charts"></div>`;
 
@@ -1291,11 +1317,8 @@
         };
         const setBtn = document.getElementById('speed-set-btn');
         if (setBtn) setBtn.addEventListener('click', () => {
-            const raw = prompt('Actual link speed in Mbps (e.g. 10000 for 10G). Blank cancels.');
-            if (raw == null || raw.trim() === '') return;
-            const mbps = Number(raw);
-            if (!Number.isFinite(mbps) || mbps <= 0) { alert('Enter a positive number of Mbps.'); return; }
-            patchSpeed({ speedOverrideBps: Math.round(mbps * 1e6) });
+            const bps = promptSpeedMbps(data.advertisedBps);
+            if (bps) patchSpeed({ speedOverrideBps: bps });
         });
         const clearBtn = document.getElementById('speed-clear-btn');
         if (clearBtn) clearBtn.addEventListener('click', () => patchSpeed({ speedOverrideBps: null }));

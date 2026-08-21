@@ -271,6 +271,15 @@ function deviceListSummaries() {
     });
 }
 
+// ifType 161 = ieee8023adLag. FLAGGED, not acted on: many agents advertise
+// ONE member's speed for the whole bundle (MikroTik bonds do), so the claim
+// is partial rather than fictional - wrong from the first poll, and the
+// conviction in poller.speedTrustAndClamp only catches it once traffic
+// exceeds a single member, which a lightly used 4x10G bundle may never do.
+// The operator knows the real total; the flag just says where to look.
+// Exported for tools/check-lag.js.
+function isLag(extra) { return Number(extra && extra.ifType) === 161; }
+
 function entitySummary(e, latest) {
     const extra = e.extra ? JSON.parse(e.extra) : {};
     // speedBps is the EFFECTIVE speed every consumer may divide by:
@@ -284,6 +293,7 @@ function entitySummary(e, latest) {
         speedBps: effSpeed, advertisedBps: e.speed_bps || null,
         speedUntrusted: e.speed_untrusted ? true : undefined,
         speedOverrideBps: e.speed_override_bps > 0 ? e.speed_override_bps : undefined,
+        lag: isLag(extra) || undefined,
         tracked: !!e.tracked, export: !!e.export, stale: !!e.stale,
         adminStatus: e.admin_status, operStatus: e.oper_status,
         hc: extra.hc !== undefined ? !!extra.hc : undefined,
@@ -671,6 +681,7 @@ const routes = [
             advertisedBps: e.speed_bps || null,
             speedUntrusted: e.speed_untrusted ? true : undefined,
             speedOverrideBps: e.speed_override_bps > 0 ? e.speed_override_bps : undefined,
+            lag: isLag(sx) || undefined,
             bucketSec: bucket, from, to,
             unit: sx.unit || undefined, meterMax: sx.max || undefined,
             okText: sx.okText || undefined, alarmText: sx.alarmText || undefined,
@@ -875,4 +886,4 @@ function readJson(req, limit = 1024 * 1024) {
     });
 }
 
-module.exports = { handle, deviceListSummaries, historySummary, oldestSampleTs };
+module.exports = { handle, deviceListSummaries, historySummary, oldestSampleTs, isLag, entitySummary };

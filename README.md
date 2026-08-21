@@ -68,6 +68,12 @@ written to a small JSON status file every cycle, for other tools to read.
   measurably exceeds its claim (virtio and Hyper-V NICs advertise fiction)
   is marked `unrated` - utilization and its alerts go quiet instead of lying
   - and a per-interface speed override restores them with the honest number.
+  The override does not wait for that conviction: `set` sits in every
+  interface row, because a port-channel's claim is usually partial rather
+  than fictional - many agents advertise one member's speed for the whole
+  bundle, so a 2x1G bond reads as 1G and its utilization runs double until
+  you set the real total. Link aggregations are badged `LAG` at discovery
+  so you know which ports to check.
 - **Add-device flow** - enter an address and credentials; SNMPCanvas
   verifies with a GET, walks the standard tables, and shows you everything
   it found so you choose what gets tracked. No MIB files involved -

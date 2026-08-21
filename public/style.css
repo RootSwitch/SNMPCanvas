@@ -389,6 +389,10 @@ table.list td.clip { max-width: 190px; overflow: hidden; text-overflow: ellipsis
 
 .range-btns { display: flex; gap: 4px; flex-wrap: wrap; }
 .range-btns button.active { background: var(--se-accent); border-color: var(--se-accent); color: #fff; }
+/* The per-row speed `set` control. An active override is shown by an accent
+   border, not a fill - the one filled control on a page is the primary action. */
+button.speed-set { padding: 1px 7px; font-size: 11px; margin-left: 6px; }
+button.speed-set.active { border-color: var(--se-accent); color: var(--se-accent); }
 
 .status-strip { display: flex; height: 12px; border-radius: 3px; overflow: hidden; border: 1px solid var(--se-border); }
 .status-strip > i { flex: 1; }
