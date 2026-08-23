@@ -55,7 +55,7 @@ db.prepare('INSERT INTO samples_hourly (entity_id, hour_ts, n) VALUES (999, ?, 1
 db.prepare('INSERT INTO samples_hourly (entity_id, hour_ts, n) VALUES (1, ?, 12)').run(now - DAY);
 const swept = sweepOrphanHistory();
 check('orphan sweep removes ROLLUP rows for deleted entities', swept === 1, String(swept));
-check('...and leaves live entities’ rollup alone',
+check('...and leaves live entities\' rollup alone',
     db.prepare('SELECT count(*) n FROM samples_hourly WHERE entity_id = 1').get().n === 1);
 // The cost check, as an assertion rather than a comment: `samples` is the
 // largest table in the database and scanning it nightly found nothing by
