@@ -77,7 +77,13 @@ written to a small JSON status file every cycle, for other tools to read.
 - **Add-device flow** - enter an address and credentials; SNMPCanvas
   verifies with a GET, walks the standard tables, and shows you everything
   it found so you choose what gets tracked. No MIB files involved -
-  everything is well-known numeric OIDs (see `server/oids.js`).
+  everything is well-known numeric OIDs (see `server/oids.js`). What arrives
+  pre-ticked is ethernet and LAG interfaces that look real: SNMPCanvas reads
+  `ifConnectorPresent` and leaves the pseudo-interface zoo unchecked, so a
+  Windows host's WAN Miniports and a Linux host's veth/docker/tap plumbing do
+  not land in your graphs by default. Nothing is hidden - untick or tick
+  anything in the wizard, and re-run Rediscover to re-evaluate an existing
+  device.
 - **Bulk add** - paste a list of addresses (one set of credentials), and
   each is probed and added with its default sensor selection - the fast way
   to onboard a whole fleet. **From file** pulls the addresses out of a

@@ -134,8 +134,44 @@ const IF_NOISE = new RegExp('^(' + [
     'tap\\d+i\\d+', 'fwbr\\d+', 'fwpr\\d+p\\d+', 'fwln\\d+i\\d+',
     'ifb\\d', 'gretap\\d', 'erspan\\d', 'gre\\d', 'sit\\d', 'ip6tnl', 'ip6gre', 'teql\\d',
     'mld-', 'dum\\w*vap', 'miireg', 'soc\\d', 'pd\\d+$',
-    'wifi\\d+ap\\d+\\.\\d+$'
+    'wifi\\d+ap\\d+\\.\\d+$',
+    // Windows. The list above is entirely Linux/Proxmox/Ubiquiti-shaped, so
+    // every one of these sailed through and was PRE-TICKED at discovery on
+    // any Windows host - they report ifType 6 like a real NIC. The
+    // ifConnectorPresent test below is the better answer and usually fires
+    // first; these names are the fallback for agents that do not answer that
+    // object. 'Local Area Connection\\*' carries a LITERAL asterisk and is the
+    // RAS pseudo-adapter naming - a real old NIC is 'Local Area Connection'
+    // with no asterisk and must keep matching nothing here.
+    'WAN Miniport', 'RAS Async', 'isatap', 'Teredo',
+    'Local Area Connection\\* \\d'
 ].join('|') + ')');
+
+// Which interfaces arrive PRE-TICKED. This is the whole rule, in one place and
+// exported, because the pre-ticked set is what an operator accepts without
+// reading it - a wrong default here is indistinguishable from a choice.
+//
+// connector is ifConnectorPresent: 1 true, 2 false, 0 = the agent does not
+// answer the object. Only an EXPLICIT false unticks, so an agent that omits
+// it behaves exactly as before: this can quieten a noisy discovery, never
+// silence a fleet.
+//
+// Worth knowing what the connector test does and does not buy. On a router it
+// buys nothing, because the pseudo-interfaces there already fail the ifType
+// test - a real Cisco CSR reports Nu0 as other(1) and Tu0 as tunnel(131). Its
+// payoff is WINDOWS, where the pseudo-interface zoo claims ethernetCsmacd(6)
+// and is otherwise indistinguishable from a NIC. And it does not settle
+// everything even there: a Hyper-V vSwitch adapter is false(2) and ifType 6,
+// identical to a WAN Miniport on every object IF-MIB exposes, so it unticks
+// too. Defensible rather than merely tolerated - the physical NIC underneath
+// carries the same traffic and stays tracked - but it is a real consequence,
+// and the operator can tick it back.
+function shouldTrackInterface(type, name, connector) {
+    if (!O.DEFAULT_TRACKED_IFTYPES.has(type)) return false;
+    if (IF_NOISE.test(name)) return false;
+    if (connector === 2 && !O.CONNECTORLESS_BUT_REAL.has(type)) return false;
+    return true;
+}
 
 // Walks a column into a Map(index -> value); missing tables resolve to an
 // empty Map instead of failing the whole probe.
@@ -196,6 +232,7 @@ async function probe(target) {
             const ifAlias = await walkMap(walkSession, O.IFX.ifAlias, warnings, 'ifAlias');
             const ifHighSpeed = await walkMap(walkSession, O.IFX.ifHighSpeed, warnings, 'ifHighSpeed');
             const ifHCIn = await walkMap(walkSession, O.IFX.ifHCInOctets, warnings, 'ifHCInOctets');
+            const ifConn = await walkMap(walkSession, O.IFX.ifConnectorPresent, warnings, 'ifConnectorPresent');
 
             for (const [idx, descr] of ifDescr) {
                 const type = Number(ifType.get(idx) ?? 0);
@@ -203,6 +240,7 @@ async function probe(target) {
                 const speedBps = highMbps > 0 ? highMbps * 1e6 : Number(ifSpeed.get(idx) ?? 0);
                 const hc = ifHCIn.has(idx);
                 const name = String(ifName.get(idx) ?? descr ?? `if${idx}`);
+                const connector = Number(ifConn.get(idx) ?? 0);
                 entities.push({
                     kind: 'if',
                     snmpIndex: idx,
@@ -211,8 +249,8 @@ async function probe(target) {
                     speedBps,
                     adminStatus: Number(ifAdmin.get(idx) ?? 0) || null,
                     operStatus: Number(ifOper.get(idx) ?? 0) || null,
-                    extra: { hc, ifType: type },
-                    tracked: O.DEFAULT_TRACKED_IFTYPES.has(type) && !IF_NOISE.test(name)
+                    extra: { hc, ifType: type, connector: connector || undefined },
+                    tracked: shouldTrackInterface(type, name, connector)
                 });
                 if (!hc && speedBps >= 100e6) {
                     warnings.push(`${name}: no 64-bit counters at ${Math.round(speedBps / 1e6)} Mbps -- ` +
@@ -654,4 +692,4 @@ async function probe(target) {
     }
 }
 
-module.exports = { probe, fetchIdentityFor };
+module.exports = { probe, fetchIdentityFor, shouldTrackInterface };

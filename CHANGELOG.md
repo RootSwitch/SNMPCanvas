@@ -2,6 +2,33 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Windows pseudo-interfaces no longer arrive pre-ticked.** The
+  default-tracked rule was `ifType in {6,7,161}` minus a name list, and that
+  list had been written entirely from Linux, Proxmox and Ubiquiti names -
+  veth, docker0, virbr, tap, gretap, mld-. Windows WAN Miniports, RAS
+  adapters, isatap and Teredo report `ethernetCsmacd(6)` like a real NIC, so
+  every one of them passed and was checked for you at discovery. Found on a
+  real desktop: five interfaces tracked where two were real.
+
+  The fix is a standard-MIB object rather than a longer name list.
+  `ifConnectorPresent` (ifXTable .17) answers "does this interface sublayer
+  have a physical connector", which is the question actually being asked.
+  Only an explicit `false(2)` unticks, so an agent that does not answer the
+  object behaves exactly as before - this can quieten a noisy discovery,
+  never silence a fleet. LAGs are exempt, since a bond legitimately has no
+  connector of its own and is usually the thing you most want graphed.
+
+  Two honest limits, both in the code comments. On a router the object buys
+  nothing, because those pseudo-interfaces already fail the ifType test - a
+  Cisco CSR reports Nu0 as `other(1)` and Tu0 as `tunnel(131)`. And a Hyper-V
+  vSwitch adapter is `false(2)` with ifType 6, indistinguishable from a WAN
+  Miniport on every object IF-MIB exposes, so it unticks too; the physical NIC
+  underneath carries the same traffic and stays tracked. The Windows names are
+  kept as a fallback for agents that omit the object.
+
+  Existing devices keep their current selection - discovery-time defaults do
+  not re-run on their own. Rediscover a Windows host to re-evaluate it.
+
 - **Set an interface's real speed before anything goes wrong.** The speed
   override existed but only appeared after the poller had convicted the
   advertised figure. That ordering is fine for virtio fiction and wrong for

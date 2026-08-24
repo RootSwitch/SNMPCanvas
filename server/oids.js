@@ -38,6 +38,12 @@ const IFX = {
     ifHCInOctets: '1.3.6.1.2.1.31.1.1.1.6',   // Counter64
     ifHCOutOctets:'1.3.6.1.2.1.31.1.1.1.10',  // Counter64
     ifHighSpeed:  '1.3.6.1.2.1.31.1.1.1.15',  // Mbps
+    // "true(1) if the interface sublayer has a physical connector." The one
+    // standard-MIB object that separates a wire from a pseudo-interface, and
+    // it does so semantically rather than by name. Proven on a real Cisco
+    // CSR: Gi1-Gi4 true(1), Nu0 and Tu0 false(2). Used at discovery only -
+    // see IF_NOISE in discover.js for what it does and does not settle.
+    ifConnectorPresent: '1.3.6.1.2.1.31.1.1.1.17',
     ifAlias:      '1.3.6.1.2.1.31.1.1.1.18'
 };
 
@@ -48,6 +54,13 @@ const DEFAULT_TRACKED_IFTYPES = new Set([
     7,    // iso88023Csmacd (old-style ethernet, seen on printers/embedded)
     161   // ieee8023adLag
 ]);
+
+// ifTypes that are legitimately connector-less and still worth graphing, so
+// the ifConnectorPresent check below must not untick them: a bond/LAG is the
+// aggregate everyone actually watches and it has no physical connector of
+// its own. Kept separate from DEFAULT_TRACKED_IFTYPES because these two sets
+// answer different questions.
+const CONNECTORLESS_BUT_REAL = new Set([161]);
 
 // --- HOST-RESOURCES-MIB (Linux hosts, Windows, many appliances) ---
 const HR = {
@@ -296,4 +309,4 @@ function matchVendor(sysObjectID, sysDescr) {
     return null;
 }
 
-module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, NSEXTEND_OUTPUT, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, UPS_MIB, VENDORS, matchVendor };
+module.exports = { SYS, IF, IFX, HR, TEMP, ASROCK_BMC, NSEXTEND_OUTPUT, HR_STORAGE_RAM, HR_STORAGE_FIXEDDISK, DEFAULT_TRACKED_IFTYPES, CONNECTORLESS_BUT_REAL, UPS_MIB, VENDORS, matchVendor };
