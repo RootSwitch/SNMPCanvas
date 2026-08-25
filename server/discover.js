@@ -144,6 +144,15 @@ const IF_NOISE = new RegExp('^(' + [
     // RAS pseudo-adapter naming - a real old NIC is 'Local Area Connection'
     // with no asterisk and must keep matching nothing here.
     'WAN Miniport', 'RAS Async', 'isatap', 'Teredo',
+    // Bluetooth PAN. Genuine hardware with a real connector, so neither the
+    // ifType gate nor ifConnectorPresent excludes it - and it is still the
+    // wrong default. Default-tracked should mean "worth a place on a wall",
+    // and a 3 Mbps personal-area radio that exists to tether a phone is not
+    // that on any of the machines it appears on. Discovered and listed like
+    // everything else here; one click to track it if you disagree.
+    // 'bnep' is the same device on Linux (bnep0, bnep1...); the bare prefix
+    // covers them all and needs no escape.
+    'Bluetooth', 'bnep',
     'Local Area Connection\\* \\d'
 ].join('|') + ')');
 

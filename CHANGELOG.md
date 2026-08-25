@@ -2,6 +2,14 @@
 
 ## Unreleased (since 1.0.0)
 
+- **Bluetooth PAN no longer arrives pre-ticked.** Unlike the WAN Miniports
+  fixed alongside it, this is not a defect being corrected: Bluetooth PAN is
+  genuine hardware with a real connector, so neither the ifType gate nor
+  `ifConnectorPresent` excludes it. It is simply the wrong default.
+  Default-tracked should mean "worth a place on a wall", and a 3 Mbps
+  personal-area radio that exists to tether a phone is not that on any machine
+  it turns up on. Still discovered, still listed, one click to track it.
+
 - **Windows pseudo-interfaces no longer arrive pre-ticked.** The
   default-tracked rule was `ifType in {6,7,161}` minus a name list, and that
   list had been written entirely from Linux, Proxmox and Ubiquiti names -

@@ -51,6 +51,14 @@ check('...but a REAL NIC named "Local Area Connection" survives',
     T(6, 'Local Area Connection', 1) === true &&
     T(6, 'Local Area Connection 2', 0) === true);
 
+// --- Bluetooth PAN: real hardware, wrong default ---------------------------
+// Not a defect like the miniports - it is genuine hardware with a connector,
+// so nothing else here excludes it. It is simply not what "tracked by
+// default" should mean on a wall display.
+check('Bluetooth PAN is not pre-ticked', T(6, 'Bluetooth Network Connection', 1) === false);
+check('...nor its Linux name', T(6, 'bnep0', 0) === false && T(6, 'bnep', 0) === false);
+check('...but a real NIC is unaffected', T(6, 'Ethernet', 1) === true);
+
 // --- connector-less but real ----------------------------------------------
 check('a LAG is tracked despite having no connector', T(161, 'Po1', 2) === true);
 check('...and a bond by any name', T(161, 'bond0', 2) === true);

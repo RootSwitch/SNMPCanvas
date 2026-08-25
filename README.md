@@ -81,7 +81,8 @@ written to a small JSON status file every cycle, for other tools to read.
   pre-ticked is ethernet and LAG interfaces that look real: SNMPCanvas reads
   `ifConnectorPresent` and leaves the pseudo-interface zoo unchecked, so a
   Windows host's WAN Miniports and a Linux host's veth/docker/tap plumbing do
-  not land in your graphs by default. Nothing is hidden - untick or tick
+  not land in your graphs by default. Bluetooth PAN is left unticked for a
+  different reason - it is real hardware, just not wall material. Nothing is hidden - untick or tick
   anything in the wizard, and re-run Rediscover to re-evaluate an existing
   device.
 - **Bulk add** - paste a list of addresses (one set of credentials), and
