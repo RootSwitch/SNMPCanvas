@@ -26,8 +26,10 @@ function check(name, pass, detail) {
     console.log(`${pass ? '  ok  ' : ' FAIL '} ${name}${detail ? '   ' + detail : ''}`);
     if (!pass) failures++;
 }
-// (type, name, connector) -> tracked. connector: 1 true, 2 false, 0 absent.
-const T = (type, name, conn) => shouldTrackInterface(type, name, conn);
+// (type, name, connector, descr) -> tracked. connector: 1 true, 2 false,
+// 0 absent. descr is ifDescr - the stock Microsoft service puts the human
+// name there while ifName is ethernet_32774-style.
+const T = (type, name, conn, descr) => shouldTrackInterface(type, name, conn, descr);
 
 // --- real hardware is never dropped, whatever else is true of it ----------
 check('a physical port is tracked', T(6, 'Gi1', 1) === true);
@@ -77,6 +79,30 @@ check('Nu0 (other) is untracked by type, connector irrelevant',
     T(1, 'Nu0', 2) === false && T(1, 'Nu0', 1) === false);
 check('Tu0 (tunnel 131) is untracked by type', T(131, 'Tu0', 2) === false);
 check('a softwareLoopback is untracked by type', T(24, 'lo', 1) === false);
+
+// --- the stock Microsoft service: descr carries the real name --------------
+// From a real domain controller on the stock service (found by the RSCanvas
+// fork; the defect was inherited from this file). Stock ifName is
+// "ethernet_32774"-style and the human-readable name lives in ifDescr - so
+// every Windows pattern above was dead on stock-service hosts until descr
+// joined the test. The fourth argument below is ifDescr.
+check('a stock-service WAN miniport unticks on its DESCR',
+    T(6, 'ethernet_32774', 0, 'Local Area Connection* 9') === false);
+check('...and a stock-service real NIC survives with its descr',
+    T(6, 'ethernet_32777', 0, 'Ethernet') === true &&
+    T(6, 'ethernet_32769', 0, 'LAN') === true);
+check('an NDIS filter clone unticks (Npcap)',
+    T(6, 'ethernet_3', 0, 'Ethernet 3-Npcap Packet Driver (NPCAP)-0000') === false);
+check('...and the WFP / QoS / NDIS-capture clones',
+    T(6, 'ethernet_1', 0, 'Ethernet 3-WFP Native MAC Layer LightWeight Filter-0000') === false &&
+    T(6, 'ethernet_5', 0, 'Ethernet 3-QoS Packet Scheduler-0000') === false &&
+    T(6, 'ethernet_2', 0, 'Ethernet 3-Microsoft NDIS Capture-0001') === false);
+check('...including the 64-char ifDescr truncation, mid-word',
+    T(6, 'ethernet_7', 0, 'Ethernet 3-WFP 802.3 MAC Layer LightWeight Filte') === false);
+check('a real port whose ALIAS style descr is plain text is untouched',
+    T(6, 'Gi1', 1, 'Uplink to core') === true);
+check('descr absent (every non-Windows agent) changes nothing',
+    T(6, 'eth0', 0) === true && T(6, 'WAN Miniport (IP)', 0) === false);
 
 // --- the Linux list still works -------------------------------------------
 check('the original Linux noise list is intact',

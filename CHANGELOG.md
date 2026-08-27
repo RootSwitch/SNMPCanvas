@@ -2,6 +2,28 @@
 
 ## Unreleased (since 1.0.0)
 
+- **The Windows interface patterns now read the name Windows actually uses.**
+  On the stock Microsoft SNMP service, `ifName` is `ethernet_32774`-style and
+  the human-readable name - the one every Windows pattern in the noise list
+  was written against - lives in `ifDescr`. The tracked rule tested only
+  ifName, so those patterns had never fired once on a stock-service host;
+  the pseudo-interfaces that did stay unticked there fell to the ifType gate
+  alone. Both names are now tested, and noise in either is noise. Found on a
+  real domain controller by the RSCanvas fork, which inherited the defect
+  from this file - the fix comes home.
+
+  The same controller surfaced a second class the list never had: **NDIS
+  filter-driver clones**. Windows enumerates one pseudo-interface per filter
+  bound to an adapter - Npcap, WFP lightweight filters, the QoS scheduler,
+  NDIS capture - each reporting the bound adapter's real type, speed,
+  connector, and live counters, so no other gate excludes them; that box
+  served eighteen tracked ghosts. Matched unanchored on the "-Filter"
+  component, with stems short enough to survive ifDescr's 64-character
+  truncation (a real capture ends "...LightWeight Filte").
+
+  Rediscover stock-service Windows hosts to re-evaluate them; agents with
+  proper ifName values are unaffected, and descr absent changes nothing.
+
 - **Bluetooth PAN no longer arrives pre-ticked.** Unlike the WAN Miniports
   fixed alongside it, this is not a defect being corrected: Bluetooth PAN is
   genuine hardware with a real connector, so neither the ifType gate nor

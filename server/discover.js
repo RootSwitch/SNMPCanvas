@@ -156,6 +156,17 @@ const IF_NOISE = new RegExp('^(' + [
     'Local Area Connection\\* \\d'
 ].join('|') + ')');
 
+// NDIS filter-driver clones. Windows enumerates one pseudo-interface PER
+// FILTER DRIVER bound to an adapter - Npcap (Wireshark), WFP lightweight
+// filters, the QoS scheduler, NDIS capture - named "Adapter-Filter-000N".
+// Each clone reports the bound adapter's REAL type, speed, connector and
+// live counters, so nothing else here excludes them: on a stock-service DC
+// they arrived as eighteen tracked ghosts more convincing than the WAN
+// miniports. Matched UNANCHORED on the "-Filter" component because the
+// adapter name comes first, and on short stems because ifDescr truncates at
+// 64 characters (a real capture ends "...LightWeight Filte").
+const IF_NDIS_FILTER = /-(WFP (Native|802\.3)|Npcap Packet|QoS Packet Scheduler|Microsoft NDIS Capture|Native WiFi Filter|Virtual WiFi Filter)/;
+
 // Which interfaces arrive PRE-TICKED. This is the whole rule, in one place and
 // exported, because the pre-ticked set is what an operator accepts without
 // reading it - a wrong default here is indistinguishable from a choice.
@@ -175,9 +186,19 @@ const IF_NOISE = new RegExp('^(' + [
 // too. Defensible rather than merely tolerated - the physical NIC underneath
 // carries the same traffic and stays tracked - but it is a real consequence,
 // and the operator can tick it back.
-function shouldTrackInterface(type, name, connector) {
+// descr rides along because of what a STOCK Microsoft SNMP service serves:
+// ifName is "ethernet_32774" and the human-readable name - the one every
+// Windows pattern in IF_NOISE was written against - lives in ifDescr. With
+// only `name` tested, those patterns never fired once on a stock-service
+// host; the zoo that DID stay unticked there fell to the ifType gate alone
+// (stock maps most miniports to tunnel/ppp types), and the ifType-6 stragglers
+// plus every NDIS filter clone sailed through as tracked. Found on a real
+// domain controller by the RSCanvas fork; the defect was inherited from here,
+// so the fix comes home. Noise in EITHER string is noise.
+function shouldTrackInterface(type, name, connector, descr) {
     if (!O.DEFAULT_TRACKED_IFTYPES.has(type)) return false;
-    if (IF_NOISE.test(name)) return false;
+    if (IF_NOISE.test(name) || (descr && IF_NOISE.test(descr))) return false;
+    if (IF_NDIS_FILTER.test(name) || (descr && IF_NDIS_FILTER.test(descr))) return false;
     if (connector === 2 && !O.CONNECTORLESS_BUT_REAL.has(type)) return false;
     return true;
 }
@@ -259,7 +280,7 @@ async function probe(target) {
                     adminStatus: Number(ifAdmin.get(idx) ?? 0) || null,
                     operStatus: Number(ifOper.get(idx) ?? 0) || null,
                     extra: { hc, ifType: type, connector: connector || undefined },
-                    tracked: shouldTrackInterface(type, name, connector)
+                    tracked: shouldTrackInterface(type, name, connector, String(descr ?? ''))
                 });
                 if (!hc && speedBps >= 100e6) {
                     warnings.push(`${name}: no 64-bit counters at ${Math.round(speedBps / 1e6)} Mbps -- ` +
