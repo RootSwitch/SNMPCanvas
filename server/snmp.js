@@ -54,31 +54,109 @@ function desUsable() {
     return desUsableCache;
 }
 
-// An operator-facing reason these credentials cannot work, or null when they
-// can. Called where credentials are ACCEPTED, so a doomed choice is refused
-// while the operator is still looking at the form it came from, and again at
-// session construction, which is what catches credentials that were stored
-// before this check existed. `desOk` is injectable so the tests can drive both
-// worlds regardless of which OpenSSL the test machine happens to carry.
-function privProtoProblem(creds, desOk) {
-    if (!creds) return null;
-    // Mirror createSession's defaulting exactly: an unknown or absent level is
-    // authPriv there, so it must be authPriv here too - otherwise a credential
-    // this refuses could still be built, or vice versa.
-    const level = LEVELS[creds.v3_level] !== undefined ? creds.v3_level : 'authPriv';
-    if (level !== 'authPriv') return null;              // privacy unused at this level
-    if (creds.v3_priv_proto !== 'des') return null;
-    if (desOk === undefined ? desUsable() : desOk) return null;
-    return 'DES privacy is not available in this build: OpenSSL 3 moved single DES to its legacy ' +
-           'provider. Choose AES-128 or AES-256 if the device offers either. If it speaks nothing ' +
-           'but DES, start the server with NODE_OPTIONS=--openssl-legacy-provider.';
-}
-
 const LEVELS = {
     noAuthNoPriv: snmp.SecurityLevel.noAuthNoPriv,
     authNoPriv:   snmp.SecurityLevel.authNoPriv,
     authPriv:     snmp.SecurityLevel.authPriv
 };
+
+// --- v3 credential spelling ----------------------------------------------
+// The protocol tables above are keyed by this app's canonical spellings, and
+// the credential form only ever sends those - but the API accepts whatever it
+// is handed. An unrecognized string used to fall through `|| sha` and
+// `|| aes` and silently become a DIFFERENT protocol, which reaches the wire
+// as "wrong digest": the operator is told their PASSWORD is wrong when the
+// typo was in the PROTOCOL NAME. That is worse than the DES error it sits
+// beside, because a failure naming the WRONG thing sends you looking in the
+// wrong place, where one naming nothing at least leaves you suspicious of
+// everything.
+//
+// So: canonicalize GENEROUSLY, refuse only what is left. Generous is a safety
+// property here, not a convenience - an install quietly living on the old
+// fallback (it passed "SHA", and the device really does speak SHA) keeps
+// working, while a real typo now stops instead of guessing. The spellings are
+// the ones people type when mirroring a working snmpwalk or an agent's own
+// createUser line.
+const spell = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const AUTH_SPELLINGS = {
+    md5: 'md5', hmacmd5: 'md5',
+    sha: 'sha', sha1: 'sha', hmacsha: 'sha', hmacsha1: 'sha',
+    sha224: 'sha224', hmacsha224: 'sha224',
+    sha256: 'sha256', hmacsha256: 'sha256',
+    sha384: 'sha384', hmacsha384: 'sha384',
+    sha512: 'sha512', hmacsha512: 'sha512'
+};
+const PRIV_SPELLINGS = {
+    des: 'des', descbc: 'des',
+    aes: 'aes', aes128: 'aes', aescfb128: 'aes', aes128cfb: 'aes',
+    aes256b: 'aes256b', aes256blumenthal: 'aes256b',
+    aes256r: 'aes256r', aes256c: 'aes256r', aes256reeder: 'aes256r', aes256cisco: 'aes256r'
+};
+// Bare AES-256 names the cipher but NOT the key-localization scheme, and the
+// two schemes are incompatible. Recognized as a family so it can be refused
+// with an explanation rather than filed under "unknown protocol" - or, far
+// worse, guessed.
+const AMBIGUOUS_AES256 = new Set(['aes256', 'aes256cfb']);
+// rouser and snmpwalk vocabulary alongside our own.
+const LEVEL_SPELLINGS = {
+    authpriv: 'authPriv', priv: 'authPriv',
+    authnopriv: 'authNoPriv', auth: 'authNoPriv',
+    noauthnopriv: 'noAuthNoPriv', noauth: 'noAuthNoPriv'
+};
+
+// Canonical { level, authProto, privProto }. An ABSENT field keeps its
+// documented default, because omitting what you do not use is not a typo and
+// refusing it would break every caller that sends only what it needs. A field
+// that is present but unrecognized resolves to undefined, for v3CredProblem to
+// refuse by name.
+function resolveV3(creds) {
+    const c = creds || {};
+    const l = spell(c.v3_level), a = spell(c.v3_auth_proto), p = spell(c.v3_priv_proto);
+    return {
+        level:     l ? LEVEL_SPELLINGS[l] : 'authPriv',
+        authProto: a ? AUTH_SPELLINGS[a]  : 'sha',
+        privProto: p ? PRIV_SPELLINGS[p]  : 'aes'
+    };
+}
+
+// An operator-facing reason these credentials cannot work, or null when they
+// can. Called where credentials are ACCEPTED, so a doomed choice is refused
+// while the operator is still looking at the form it came from, and again at
+// session construction, which catches credentials stored before these checks
+// existed. Only the fields the chosen level actually USES are judged: a
+// nonsense privacy protocol is nobody's problem at authNoPriv. `desOk` is
+// injectable so the tests can drive both OpenSSL worlds on any machine.
+function v3CredProblem(creds, desOk) {
+    if (!creds) return null;
+    const { level, authProto, privProto } = resolveV3(creds);
+    if (!level) {
+        return 'Unknown SNMPv3 security level "' + creds.v3_level + '". ' +
+               'Use authPriv, authNoPriv, or noAuthNoPriv.';
+    }
+    if (level !== 'noAuthNoPriv' && !authProto) {
+        return 'Unknown SNMPv3 auth protocol "' + creds.v3_auth_proto + '". ' +
+               'Use one of: md5, sha, sha224, sha256, sha384, sha512.';
+    }
+    if (level === 'authPriv') {
+        if (AMBIGUOUS_AES256.has(spell(creds.v3_priv_proto))) {
+            return '"' + creds.v3_priv_proto + '" does not say WHICH AES-256: use aes256b ' +
+                   '(Blumenthal) or aes256r (Reeder / Cisco). They are incompatible ' +
+                   'key-localization schemes, and the wrong one fails exactly like a wrong privacy ' +
+                   'password - so this is the one place a guess would cost more than a question.';
+        }
+        if (!privProto) {
+            return 'Unknown SNMPv3 privacy protocol "' + creds.v3_priv_proto + '". ' +
+                   'Use one of: des, aes, aes256b, aes256r.';
+        }
+        if (privProto === 'des' && !(desOk === undefined ? desUsable() : desOk)) {
+            return 'DES privacy is not available in this build: OpenSSL 3 moved single DES to its legacy ' +
+                   'provider. Choose AES-128 or AES-256 if the device offers either. If it speaks nothing ' +
+                   'but DES, start the server with NODE_OPTIONS=--openssl-legacy-provider.';
+        }
+    }
+    return null;
+}
 
 const log = (...args) => console.log(new Date().toISOString(), '[snmp]', ...args);
 
@@ -139,18 +217,19 @@ function createSession(target) {
     };
     if (target.version === '3') {
         const c = target.creds;
-        // Backstop for credentials saved before this check existed: fail with
-        // the sentence that names the cause, not with the cipher's own noise.
-        const credProblem = privProtoProblem(c);
+        // Backstop for credentials saved before these checks existed: fail with
+        // the sentence that names the cause, rather than with the cipher's own
+        // noise or by quietly substituting a protocol nobody chose.
+        const credProblem = v3CredProblem(c);
         if (credProblem) throw new Error(credProblem);
-        const level = LEVELS[c.v3_level] !== undefined ? c.v3_level : 'authPriv';
-        const user = { name: c.v3_user || '', level: LEVELS[level] };
-        if (level !== 'noAuthNoPriv') {
-            user.authProtocol = AUTH_PROTOS[c.v3_auth_proto] || snmp.AuthProtocols.sha;
+        const canon = resolveV3(c);
+        const user = { name: c.v3_user || '', level: LEVELS[canon.level] };
+        if (canon.level !== 'noAuthNoPriv') {
+            user.authProtocol = AUTH_PROTOS[canon.authProto];
             user.authKey = c.v3_auth_key || '';
         }
-        if (level === 'authPriv') {
-            user.privProtocol = PRIV_PROTOS[c.v3_priv_proto] || snmp.PrivProtocols.aes;
+        if (canon.level === 'authPriv') {
+            user.privProtocol = PRIV_PROTOS[canon.privProto];
             user.privKey = c.v3_priv_key || '';
         }
         // BOTH return paths are guarded. v3 is the one more likely to receive
@@ -327,4 +406,4 @@ function closeQuietly(session) {
 }
 
 module.exports = { createSession, get, getMany, walkColumn, closeQuietly, offendingOid,
-    desUsable, privProtoProblem, AUTH_PROTOS, PRIV_PROTOS, LEVELS };
+    desUsable, v3CredProblem, resolveV3, AUTH_PROTOS, PRIV_PROTOS, LEVELS };

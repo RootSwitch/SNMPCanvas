@@ -409,7 +409,7 @@ const routes = [
         // Refuse a credential this build cannot perform while the operator is
         // still looking at the form, rather than letting it become a device
         // that times out forever for a reason nothing on screen explains.
-        const credProblem = S.privProtoProblem(target.creds);
+        const credProblem = S.v3CredProblem(target.creds);
         if (credProblem) return bad(res, credProblem);
         try {
             const result = await discover.probe(target);
@@ -522,7 +522,7 @@ const routes = [
         }
         // Checked before ANY write, so a refused edit changes nothing at all.
         if (body.credentials && typeof body.credentials === 'object') {
-            const credProblem = S.privProtoProblem(credsFromBody({ version: d.snmp_version, ...body.credentials }));
+            const credProblem = S.v3CredProblem(credsFromBody({ version: d.snmp_version, ...body.credentials }));
             if (credProblem) return bad(res, credProblem);
         }
         db.prepare('UPDATE devices SET name = ?, host = ?, port = ?, poll_interval_s = ?, enabled = ?, notes = ?, export_uptime = ? WHERE id = ?')

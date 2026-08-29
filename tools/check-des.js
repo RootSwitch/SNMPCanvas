@@ -23,7 +23,7 @@ function check(name, pass, detail) {
 const des = (over) => ({ v3_level: 'authPriv', v3_priv_proto: 'des', ...over });
 
 // --- the refusal, and what it must say ------------------------------------
-const msg = S.privProtoProblem(des(), false);
+const msg = S.v3CredProblem(des(), false);
 check('DES at authPriv is refused when the build cannot perform it',
     typeof msg === 'string' && msg.length > 0);
 // The OPENING CLAUSE has to name it, not a mention buried in the remedy: an
@@ -38,25 +38,25 @@ check('...and names AES as the ordinary answer', !!msg && msg.includes('AES'));
 
 // --- the other world ------------------------------------------------------
 check('DES is allowed where the build CAN perform it',
-    S.privProtoProblem(des(), true) === null);
+    S.v3CredProblem(des(), true) === null);
 
 // --- only DES, and only where privacy is actually used --------------------
 check('no AES variant is ever refused',
-    S.privProtoProblem({ v3_level: 'authPriv', v3_priv_proto: 'aes' }, false) === null &&
-    S.privProtoProblem({ v3_level: 'authPriv', v3_priv_proto: 'aes256b' }, false) === null &&
-    S.privProtoProblem({ v3_level: 'authPriv', v3_priv_proto: 'aes256r' }, false) === null);
+    S.v3CredProblem({ v3_level: 'authPriv', v3_priv_proto: 'aes' }, false) === null &&
+    S.v3CredProblem({ v3_level: 'authPriv', v3_priv_proto: 'aes256b' }, false) === null &&
+    S.v3CredProblem({ v3_level: 'authPriv', v3_priv_proto: 'aes256r' }, false) === null);
 check('authNoPriv never encrypts, so DES there is not a problem',
-    S.privProtoProblem(des({ v3_level: 'authNoPriv' }), false) === null);
-check('...nor at noAuthNoPriv', S.privProtoProblem(des({ v3_level: 'noAuthNoPriv' }), false) === null);
-check('v2c credentials are untouched', S.privProtoProblem({ community: 'public' }, false) === null);
-check('absent credentials are not a problem', S.privProtoProblem(null, false) === null);
+    S.v3CredProblem(des({ v3_level: 'authNoPriv' }), false) === null);
+check('...nor at noAuthNoPriv', S.v3CredProblem(des({ v3_level: 'noAuthNoPriv' }), false) === null);
+check('v2c credentials are untouched', S.v3CredProblem({ community: 'public' }, false) === null);
+check('absent credentials are not a problem', S.v3CredProblem(null, false) === null);
 
 // The defaulting here must MATCH createSession's, or this could permit a
 // credential the session builder then encrypts with DES anyway.
 check('an absent level defaults to authPriv, exactly as createSession does',
-    typeof S.privProtoProblem({ v3_priv_proto: 'des' }, false) === 'string');
+    typeof S.v3CredProblem({ v3_priv_proto: 'des' }, false) === 'string');
 check('...and so does an unrecognized level',
-    typeof S.privProtoProblem(des({ v3_level: 'nonsense' }), false) === 'string');
+    typeof S.v3CredProblem(des({ v3_level: 'nonsense' }), false) === 'string');
 
 // --- the backstop ---------------------------------------------------------
 // Credentials stored before this check existed never pass through the API
