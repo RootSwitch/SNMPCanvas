@@ -42,7 +42,7 @@ function clip(s, n) {
 
 // sysObjectID + sysDescr -> a short OS/software summary. Rules per family,
 // each verified against a real device's string:
-//   netsnmp : "Linux MPC1 6.17.2-1-pve #1 SMP ..."          -> "Linux 6.17.2-1-pve (Proxmox)"
+//   netsnmp : "Linux pve-1 6.17.2-1-pve #1 SMP ..."          -> "Linux 6.17.2-1-pve (Proxmox)"
 //   windows : "Hardware: ... Software: Windows Version 6.3
 //              (Build 20348 Multiprocessor Free)"            -> "Windows Server 2022 (build 20348)"
 //   pfsense : "pfSense FW-1.dl 2.8.1-RELEASE FreeBSD 15.0-CURRENT amd64"

@@ -10,7 +10,7 @@
 // speeds; nightly replication then (a) alerted at 133-153% "utilization"
 // and (b) had its fastest samples silently discarded by the 2x-advertised
 // sanity clamp. Real-world acceptance cases: FreeBSD hn1 (Hyper-V netvsc)
-// and TrueNASMain vtnet2 (virtio-net).
+// and a TrueNAS guest vtnet2 (virtio-net).
 
 const os = require('node:os');
 const fs = require('node:fs');

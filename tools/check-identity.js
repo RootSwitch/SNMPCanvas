@@ -19,10 +19,10 @@ const E = '1.3.6.1.4.1.';
 
 // --- OS summaries, one per family, real strings ------------------------------
 check('Proxmox host',
-    IDY.summarizeOS(E + '8072.3.2.10', 'Linux MPC1 6.17.2-1-pve #1 SMP PREEMPT_DYNAMIC PMX 6.17.2-1 (2025-10-21T11:55Z) x86_64'),
+    IDY.summarizeOS(E + '8072.3.2.10', 'Linux pve-1 6.17.2-1-pve #1 SMP PREEMPT_DYNAMIC PMX 6.17.2-1 (2025-10-21T11:55Z) x86_64'),
     'Linux 6.17.2-1-pve (Proxmox)');
 check('plain Linux (Rocky kernel)',
-    IDY.summarizeOS(E + '8072.3.2.10', 'Linux ndns-1.domain.local 6.12.0-211.34.1.el10_2.x86_64 #1 SMP PREEMPT_DYNAMIC Tue Jul 14 23:43:25 UTC 2026 x86_64'),
+    IDY.summarizeOS(E + '8072.3.2.10', 'Linux dns-1.domain.local 6.12.0-211.34.1.el10_2.x86_64 #1 SMP PREEMPT_DYNAMIC Tue Jul 14 23:43:25 UTC 2026 x86_64'),
     'Linux 6.12.0-211.34.1.el10_2.x86_64');
 check('AMI BMC (armv6l, hostname "(none)")',
     IDY.summarizeOS(E + '8072.3.2.10', 'Linux (none) 3.18.0 #1 Thu Mar 7 09:57:34 CST 2024 armv6l'),
