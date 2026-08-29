@@ -15,7 +15,14 @@
 //   quietly riding the old fallback (it sent "SHA", and the device really does
 //   speak sha) breaks on upgrade for a credential that was working fine.
 
+const os = require('node:os');
+const fs = require('node:fs');
+const path = require('node:path');
+
+process.env.SNMPCANVAS_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'snmpcanvas-v3creds-'));
+
 const S = require('../server/snmp');
+const { credsFromBody } = require('../server/api');
 
 let failures = 0;
 function check(name, pass, detail) {
@@ -131,6 +138,30 @@ try {
 if (good) S.closeQuietly(good);
 check('a credential written in CLI spelling still builds a session',
     !!good && !goodErr, goodErr || '');
+
+// --- the route layer must not normalize the guard blind -------------------
+// Found by driving the deployed build rather than by reading it: the API had
+// its OWN silent substitution one layer earlier, whitelisting the level and
+// replacing anything else with authPriv, so a nonsense level reached the guard
+// already laundered and was never refused. A guard is only as honest as what
+// reaches it.
+const bodyOf = (over) => credsFromBody({ version: '3', v3_user: 'u', v3_auth_key: 'k',
+    v3_priv_key: 'k', ...over });
+check('a nonsense level SURVIVES credsFromBody, so the guard can refuse it',
+    bodyOf({ v3_level: 'encrypted' }).v3_level === 'encrypted');
+check('...and the guard does refuse it',
+    typeof problem(bodyOf({ v3_level: 'encrypted' })) === 'string');
+check('an alias survives too, and resolves rather than being eaten',
+    bodyOf({ v3_level: 'priv' }).v3_level === 'priv' &&
+    problem(bodyOf({ v3_level: 'priv' })) === null &&
+    S.resolveV3(bodyOf({ v3_level: 'priv' })).level === 'authPriv');
+check('an absent level still defaults to authPriv at the route layer',
+    bodyOf({}).v3_level === 'authPriv' && problem(bodyOf({})) === null);
+check('the canonical spellings are unchanged by the round trip',
+    bodyOf({ v3_level: 'noAuthNoPriv' }).v3_level === 'noAuthNoPriv' &&
+    bodyOf({ v3_level: 'authNoPriv' }).v3_level === 'authNoPriv');
+check('v2c bodies still come back as a community', credsFromBody({ version: '2c',
+    community: 'public' }).community === 'public');
 
 console.log(failures ? `\n${failures} FAILED` : '\nall v3 credential checks passed');
 process.exit(failures ? 1 : 0);

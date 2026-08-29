@@ -308,7 +308,13 @@ function credsFromBody(body) {
     if (body.version === '3') {
         return {
             v3_user: String(body.v3_user || ''),
-            v3_level: ['noAuthNoPriv', 'authNoPriv', 'authPriv'].includes(body.v3_level) ? body.v3_level : 'authPriv',
+            // Raw, like the two protocol fields beside it. This used to whitelist
+            // the three canonical spellings and silently substitute authPriv for
+            // anything else - which quietly ate "priv" (rouser's own word for
+            // it, and correct) and a typo alike, and did so BEFORE v3CredProblem
+            // could see either. snmp.js canonicalizes the aliases and refuses
+            // what is left, by name; an absent level still defaults here.
+            v3_level: String(body.v3_level || 'authPriv'),
             v3_auth_proto: String(body.v3_auth_proto || 'sha'),
             v3_auth_key: String(body.v3_auth_key || ''),
             v3_priv_proto: String(body.v3_priv_proto || 'aes'),
@@ -897,4 +903,5 @@ function readJson(req, limit = 1024 * 1024) {
     });
 }
 
-module.exports = { handle, deviceListSummaries, historySummary, oldestSampleTs, isLag, entitySummary };
+module.exports = { handle, deviceListSummaries, historySummary, oldestSampleTs, isLag, entitySummary,
+    credsFromBody };
