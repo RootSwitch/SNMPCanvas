@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { db, getSetting, setSetting, saveCredentials, loadCredentials, generateIfCode, DATA_DIR, DB_FILE } = require('./db');
+const S = require('./snmp');
 const auth = require('./auth');
 const themeFile = require('./theme');
 const discover = require('./discover');
@@ -405,6 +406,11 @@ const routes = [
             version,
             creds: credsFromBody(body)
         };
+        // Refuse a credential this build cannot perform while the operator is
+        // still looking at the form, rather than letting it become a device
+        // that times out forever for a reason nothing on screen explains.
+        const credProblem = S.privProtoProblem(target.creds);
+        if (credProblem) return bad(res, credProblem);
         try {
             const result = await discover.probe(target);
             const token = crypto.randomBytes(16).toString('base64url');
@@ -513,6 +519,11 @@ const routes = [
             const clash = db.prepare('SELECT name FROM devices WHERE id != ? AND enabled = 1 AND host = ? AND port = ?')
                 .get(d.id, host, port);
             if (clash) return bad(res, `${host}:${port} is already monitored as "${clash.name}".`);
+        }
+        // Checked before ANY write, so a refused edit changes nothing at all.
+        if (body.credentials && typeof body.credentials === 'object') {
+            const credProblem = S.privProtoProblem(credsFromBody({ version: d.snmp_version, ...body.credentials }));
+            if (credProblem) return bad(res, credProblem);
         }
         db.prepare('UPDATE devices SET name = ?, host = ?, port = ?, poll_interval_s = ?, enabled = ?, notes = ?, export_uptime = ? WHERE id = ?')
             .run(name, host, port, interval, enabled, notes, exportUptime, d.id);

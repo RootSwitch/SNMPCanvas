@@ -540,7 +540,7 @@
                 <option value="aes">AES-128</option>
                 <option value="aes256b">AES-256 (Blumenthal)</option>
                 <option value="aes256r">AES-256 (Reeder / Cisco)</option>
-                <option value="des">DES</option>
+                <option value="des">DES (needs legacy OpenSSL)</option>
             </select>
             <label class="v3-priv" style="display:none">Privacy password</label><input class="v3-priv" style="display:none" type="password" id="f-privkey">`;
     }

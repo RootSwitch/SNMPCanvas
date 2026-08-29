@@ -5,6 +5,7 @@
 // become BigInt - never Number).
 
 const snmp = require('net-snmp');
+const crypto = require('node:crypto');
 
 const AUTH_PROTOS = {
     md5:    snmp.AuthProtocols.md5,
@@ -24,6 +25,54 @@ const PRIV_PROTOS = {
     aes256b: snmp.PrivProtocols.aes256b,
     aes256r: snmp.PrivProtocols.aes256r
 };
+
+// --- privacy protocol availability ---------------------------------------
+// OpenSSL 3 moved SINGLE DES to its legacy provider, so a stock Node build
+// cannot perform it. net-snmp accepts the protocol and fails much later, deep
+// inside the cipher, with
+//     error:0308010C:digital envelope routines::unsupported
+// which names neither DES, nor SNMP, nor anything to do about it. The measured
+// cost of that silence is an operator concluding they mistyped their own
+// snmpwalk and moving on - it happened on this fleet, on a PDU walk, months
+// before anyone suspected the cipher. 3DES and AES are unaffected; only single
+// DES was removed.
+//
+// DETECTED, never assumed: --openssl-legacy-provider genuinely restores it
+// (measured, not inferred), so a device that speaks nothing but DES - some
+// v3-only BMCs offer no better - stays monitorable, and the refusal below
+// names that way back in rather than just saying no.
+let desUsableCache = null;
+function desUsable() {
+    if (desUsableCache === null) {
+        try {
+            crypto.createCipheriv('des-cbc', Buffer.alloc(8), Buffer.alloc(8));
+            desUsableCache = true;
+        } catch (_) {
+            desUsableCache = false;
+        }
+    }
+    return desUsableCache;
+}
+
+// An operator-facing reason these credentials cannot work, or null when they
+// can. Called where credentials are ACCEPTED, so a doomed choice is refused
+// while the operator is still looking at the form it came from, and again at
+// session construction, which is what catches credentials that were stored
+// before this check existed. `desOk` is injectable so the tests can drive both
+// worlds regardless of which OpenSSL the test machine happens to carry.
+function privProtoProblem(creds, desOk) {
+    if (!creds) return null;
+    // Mirror createSession's defaulting exactly: an unknown or absent level is
+    // authPriv there, so it must be authPriv here too - otherwise a credential
+    // this refuses could still be built, or vice versa.
+    const level = LEVELS[creds.v3_level] !== undefined ? creds.v3_level : 'authPriv';
+    if (level !== 'authPriv') return null;              // privacy unused at this level
+    if (creds.v3_priv_proto !== 'des') return null;
+    if (desOk === undefined ? desUsable() : desOk) return null;
+    return 'DES privacy is not available in this build: OpenSSL 3 moved single DES to its legacy ' +
+           'provider. Choose AES-128 or AES-256 if the device offers either. If it speaks nothing ' +
+           'but DES, start the server with NODE_OPTIONS=--openssl-legacy-provider.';
+}
 
 const LEVELS = {
     noAuthNoPriv: snmp.SecurityLevel.noAuthNoPriv,
@@ -90,6 +139,10 @@ function createSession(target) {
     };
     if (target.version === '3') {
         const c = target.creds;
+        // Backstop for credentials saved before this check existed: fail with
+        // the sentence that names the cause, not with the cipher's own noise.
+        const credProblem = privProtoProblem(c);
+        if (credProblem) throw new Error(credProblem);
         const level = LEVELS[c.v3_level] !== undefined ? c.v3_level : 'authPriv';
         const user = { name: c.v3_user || '', level: LEVELS[level] };
         if (level !== 'noAuthNoPriv') {
@@ -273,4 +326,5 @@ function closeQuietly(session) {
     try { session.close(); } catch (_) { /* already closed */ }
 }
 
-module.exports = { createSession, get, getMany, walkColumn, closeQuietly, offendingOid, AUTH_PROTOS, PRIV_PROTOS, LEVELS };
+module.exports = { createSession, get, getMany, walkColumn, closeQuietly, offendingOid,
+    desUsable, privProtoProblem, AUTH_PROTOS, PRIV_PROTOS, LEVELS };
