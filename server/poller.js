@@ -716,7 +716,7 @@ function prune() {
         const retentionDays = parseInt(getSetting('retention_days'), 10) || 90;
         const cutoff = Math.floor(Date.now() / 1000) - retentionDays * 86400;
         const entityIds = db.prepare('SELECT id FROM entities').all().map((r) => r.id);
-        const del = db.prepare('DELETE FROM samples WHERE entity_id = ? AND ts < ?');
+        const del = db.prepare(PRUNE_SAMPLES_SQL);
         // The rollup obeys the same retention as the raw rows it summarises.
         // Retention is a promise about how long data is KEPT, and an hourly
         // average is still that data - leaving it behind would quietly turn a
@@ -754,9 +754,35 @@ function prune() {
 // receiving samples, and a row summarising a partial hour would be wrong until
 // re-summarised.
 const ROLLUP_EVERY_MS = 10 * 60 * 1000;
-const ROLLUP_CHUNK_S = 6 * 3600;   // hours aggregated per event-loop yield
+const ROLLUP_CHUNK_S = 6 * 3600;   // hours aggregated per pass
 let rollupAt = 0;
 let rollupRunning = false;
+
+// ONE ENTITY AT A TIME, and that is the whole point. samples is keyed
+// PRIMARY KEY (entity_id, ts), so a bare `ts` range cannot use it: SQLite has
+// to SCAN the entire table for every chunk, and better-sqlite3 is synchronous,
+// so the process serves nothing at all while it does. Measured on the Pi 3B+
+// that this rollup was originally written to protect: 14.8 MILLION rows read
+// to emit 1,644 - 66.5 seconds of dead event loop, against 1.7 seconds for the
+// identical work done per entity. A 40x difference, and the wrong side of it
+// grows with the table: at the 90-day default that Pi was 19 days in, so the
+// scan had roughly 4.7x still to grow.
+//
+// Supplying entity_id makes the primary key usable and the plan becomes
+// SEARCH ... USING PRIMARY KEY. It is the same shape prune() has always used,
+// and the bug was simply that the rollup never got it.
+//
+// Exported so tools/check-rollup-plan.js can pin the PLAN of this exact
+// string. A test that re-declares the query proves nothing about the one that
+// runs.
+const ROLLUP_SQL = `
+    INSERT OR REPLACE INTO samples_hourly (entity_id, hour_ts, n, a0, a1, a2, a3, a4, a5, m0, m1, st)
+    SELECT entity_id, (ts / 3600) * 3600, count(*),
+           avg(v0), avg(v1), avg(v2), avg(v3), avg(v4), avg(v5),
+           max(v0), max(v1), min(status)
+    FROM samples WHERE entity_id = ? AND ts >= ? AND ts < ?
+    GROUP BY (ts / 3600) * 3600`;
+const PRUNE_SAMPLES_SQL = 'DELETE FROM samples WHERE entity_id = ? AND ts < ?';
 
 function maybeRollup() {
     if (rollupRunning || Date.now() < rollupAt) return;
@@ -789,35 +815,43 @@ function rollup() {
     // INSERT OR REPLACE, not INSERT: the last chunk of a previous run may have
     // covered an hour that was still in progress on a clock skew, and a device
     // added mid-hour produces rows for an hour already summarised. Replacing is
-    // idempotent; ignoring would freeze a wrong average in place.
-    const roll = db.prepare(`
-        INSERT OR REPLACE INTO samples_hourly (entity_id, hour_ts, n, a0, a1, a2, a3, a4, a5, m0, m1, st)
-        SELECT entity_id, (ts / 3600) * 3600, count(*),
-               avg(v0), avg(v1), avg(v2), avg(v3), avg(v4), avg(v5),
-               max(v0), max(v1), min(status)
-        FROM samples WHERE ts >= ? AND ts < ?
-        GROUP BY entity_id, (ts / 3600) * 3600`);
+    // idempotent; ignoring would freeze a wrong average in place. It is also
+    // what makes an interrupted chunk safe to redo below.
+    const roll = db.prepare(ROLLUP_SQL);
+    // samples cannot hold orphans - deleting a device removes its sample rows
+    // in the same transaction as the device row (see sweepOrphanHistory) - so
+    // the live entity list is exactly the set of entity_ids present.
+    const entityIds = db.prepare('SELECT id FROM entities').all().map((r) => r.id);
 
     let rows = 0;
-    const step = (start) => {
+    // Two nested walks flattened into one step function: `start` is the time
+    // chunk, `i` the entity within it. The MARK MOVES ONLY WHEN A CHUNK IS
+    // COMPLETE FOR EVERY ENTITY - a chunk abandoned half way is simply redone,
+    // which INSERT OR REPLACE makes free, whereas advancing early would leave
+    // the skipped entities with no hourly rows and nothing to notice it.
+    const step = (start, i) => {
         if (start >= nowHour) {
             rollupRunning = false;
             if (backfill) log(`rollup backfill finished: ${rows} hourly rows in ${((Date.now() - started) / 1000).toFixed(1)}s`);
             return;
         }
         const end = Math.min(start + ROLLUP_CHUNK_S, nowHour);
-        try {
-            rows += roll.run(start, end).changes;
+        if (i >= entityIds.length) {
             setRollupMark(end);
+            setImmediate(() => step(end, 0));
+            return;
+        }
+        try {
+            rows += roll.run(entityIds[i], start, end).changes;
         } catch (err) {
             // Leave the mark where it was so the next run retries this chunk.
             rollupRunning = false;
             log('rollup failed:', err.message);
             return;
         }
-        setImmediate(() => step(end)); // yield between chunks, as the prune does
+        setImmediate(() => step(start, i + 1)); // yield between entities, as the prune does
     };
-    step(from);
+    step(from, 0);
 }
 
 function setRollupMark(ts) {
@@ -825,4 +859,5 @@ function setRollupMark(ts) {
       .run(String(ts));
 }
 
-module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged, speedTrustAndClamp, sweepOrphanHistory };
+module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged,
+    speedTrustAndClamp, sweepOrphanHistory, ROLLUP_SQL, PRUNE_SAMPLES_SQL };
