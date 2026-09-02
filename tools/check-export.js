@@ -148,6 +148,20 @@ check('short code is exported', one.code === 'K7Q2', one.code);
 check('ifName is exported', one.name === 'Gi0/1', one.name);
 check('alias is exported', one.alias === 'uplink to fw', one.alias);
 
+// --- a parked row never reaches the feed ------------------------------------
+// The reconciler parks a row whose ifIndex was re-dealt to a different interface
+// on a tombstone (see server/reconcile.js). If that row still carries export=1,
+// the SELECT must not pick it up: Number('gone:6#9') is NaN, and AlertCanvas
+// would be handed a corpse that can never read again.
+const devId = db.prepare('SELECT id FROM devices LIMIT 1').get().id;
+db.prepare(`INSERT INTO entities (id, device_id, kind, snmp_index, name, alias, speed_bps, export, code, admin_status, oper_status, stale)
+            VALUES (9009, ?, 'if', 'gone:6#9009', 'Ethernet 3', '', 10000000000, 1, 'GONE', 1, 1, 1)`).run(devId);
+exporter.write();
+const doc2 = JSON.parse(fs.readFileSync(path.join(TMP, 'snmp-status.json'), 'utf8'));
+check('a parked (tombstoned) interface is excluded from the export even with export=1',
+    !(doc2.interfaces || []).some((i) => i.code === 'GONE'), JSON.stringify((doc2.interfaces || []).map((i) => i.code)));
+check('...and no exported ifIndex is NaN', (doc2.interfaces || []).every((i) => Number.isInteger(i.ifIndex)));
+
 db.close();
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nexport contract intact');

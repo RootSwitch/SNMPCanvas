@@ -134,6 +134,9 @@ function write() {
                d.name AS device_name, d.host, d.status AS device_status
         FROM entities e JOIN devices d ON d.id = e.device_id
         WHERE e.export = 1 AND e.kind = 'if' AND d.enabled = 1
+          -- a parked row's snmp_index is a reconciler tombstone, not an ifIndex;
+          -- exporting it would put NaN in the feed and a corpse in front of AlertCanvas
+          AND e.snmp_index NOT GLOB '*[^0-9]*'
         ORDER BY d.name, e.name`).all();
     const interfaces = ifRows.map((r) => {
         const s = latest.get(r.id);
@@ -151,13 +154,16 @@ function write() {
             device: r.device_name,
             ifIndex: Number(r.snmp_index),
             name: r.name,
-            // Present ONLY when true: this ifIndex is now reporting a different
-            // ifName than the one recorded at discovery - a module swapped, a
-            // VLAN interface recreated, a chassis renumbered on reboot. The
-            // index is reused, so `name` below is the OLD name while the
-            // counters are whatever occupies that index NOW. Without this a
-            // consumer cannot tell, and a wall tile or an alert rule bound to
-            // the old name silently reports someone else's traffic.
+            // Present ONLY when true. Two things set it and both mean "do not
+            // trust this row's counters yet": the poller saw a different ifName
+            // at this index than the one recorded (a module swapped, a chassis
+            // renumbered on reboot), or the last probe did not see this index
+            // at all. The row is NOT relabelled in either case - reconcile.js
+            // moves the right row to the right index, or parks this one on a
+            // tombstone that the WHERE clause above keeps out of the feed - so
+            // `name` below is always the interface the history belongs to.
+            // A consumer that ignores this flag will show a stale figure, not
+            // someone else's traffic. There is no separate "renamed" field.
             //
             // Omitted rather than emitted as false: at 19,200 interfaces a
             // `"stale": false` on every row adds ~300KB to an 11MB file that is

@@ -2,6 +2,25 @@
 
 ## Unreleased (since 1.0.0)
 
+- **A re-dealt ifIndex no longer relabels the row that held it.** When an
+  agent renumbers its interfaces - every reboot on a Hyper-V or WSL host with
+  the pre-fix RSNMPAgent, a chassis that renumbers, a domain controller after
+  a NIC re-enumeration - the re-index used to find the existing row at the
+  old index and rename it in place, keeping its id, tracked flag, short code
+  and history. On a real desktop that left a tracked row called "Loopback
+  Pseudo-Interface 1" carrying a 10GbE NIC's Gb/s history while polling a
+  loopback at 0 b/s, and the actual NIC sitting at its new index untracked
+  and never sampled. The reconciler now treats a changed name at an index as
+  the index having moved: the existing row that already carries the new name
+  and has lost its own index follows its interface to the new index (id,
+  tracking, code and history intact); zero or several such rows mints a
+  fresh row instead of guessing, because a wrong guess splices two ports'
+  histories under one code. A row whose index was taken and that nothing
+  rebinds is parked on a tombstone, flagged stale, and left tracked for a
+  human Rediscover to retire - it is never polled at the wrong index and
+  never exported. Rotations resolve in one pass. Fixture and three planted
+  defects in check-drift.js and check-export.js.
+
 - **The Windows interface patterns now read the name Windows actually uses.**
   On the stock Microsoft SNMP service, `ifName` is `ethernet_32774`-style and
   the human-readable name - the one every Windows pattern in the noise list

@@ -129,6 +129,76 @@ function fakeSession(dead) {
     check('manual Rediscover DOES untrack it (a human asked)',
         afterManual.tracked === 0 && manual.removed.length === 1, JSON.stringify(manual.removed));
 
+
+    // --- a re-dealt index must not relabel the row that held it --------
+    // Fixture from a real desktop (4000D-Dake, 2026-09-01): after its agent
+    // renumbered every ifIndex, the tracked 10GbE row was renamed in place to
+    // "vSwitch (External Virtual Switch)" and later "Loopback Pseudo-Interface
+    // 1", keeping the NIC's Gb/s history, tracked flag and short code while
+    // polling a loopback - and the real NIC sat at a new index, untracked,
+    // never sampled. Name at a changed index is the witness; the row follows.
+    db.prepare("INSERT INTO devices (id, name, host, snmp_version, status, created_ts) VALUES (8, 'desk', '203.0.113.6', '2c', 'up', ?)").run(now);
+    const ins8 = db.prepare("INSERT INTO entities (id, device_id, kind, snmp_index, name, tracked, code) VALUES (?, 8, 'if', ?, ?, ?, ?)");
+    ins8.run(80, '6',  'Ethernet 3', 1, '69PS');                          // the NIC the operator tracks
+    ins8.run(81, '11', 'vSwitch (External Virtual Switch)', 0, '5MR9');   // untracked, will take index 6
+    ins8.run(82, '3',  'Wi-Fi 4', 0, '3P3F');                             // untracked, holds the index the NIC moves to
+    const redeal = { system: {}, vendorKey: null, identity: {}, entities: [
+        { kind: 'if', snmpIndex: '3',  name: 'Ethernet 3', tracked: true, extra: {} },
+        { kind: 'if', snmpIndex: '6',  name: 'vSwitch (External Virtual Switch)', tracked: true, extra: {} },
+        { kind: 'if', snmpIndex: '14', name: 'Wi-Fi 4', tracked: false, extra: {} },
+    ] };
+    const r1 = reconcileDevice({ id: 8, name: 'desk' }, redeal, { untrack: false });
+    const nic = db.prepare('SELECT * FROM entities WHERE id = 80').get();
+    check('a tracked row FOLLOWS its interface to the new index', nic.snmp_index === '3' && nic.name === 'Ethernet 3', JSON.stringify(nic));
+    check('...keeping id, tracked, code and (therefore) its history', nic.tracked === 1 && nic.code === '69PS' && nic.stale === 0, JSON.stringify(nic));
+    const vsw = db.prepare('SELECT * FROM entities WHERE id = 81').get();
+    check('the row that now answers at the old index is the vSwitch row, moved - not the NIC row relabelled',
+        vsw.snmp_index === '6' && vsw.name === 'vSwitch (External Virtual Switch)' && vsw.code === '5MR9', JSON.stringify(vsw));
+    const wifi = db.prepare('SELECT * FROM entities WHERE id = 82').get();
+    check('a three-way rotation lands every row without a UNIQUE collision', wifi.snmp_index === '14' && wifi.name === 'Wi-Fi 4', JSON.stringify(wifi));
+    check('nothing was renamed in place and nothing was inserted',
+        r1.updated.length === 0 && r1.added.length === 0 && r1.rebound.length === 3 && r1.parked.length === 0, JSON.stringify(r1));
+
+    // --- ambiguity mints fresh rather than guessing ------------------------
+    // Hyper-V recreates "vSwitch (Default Switch)" with a new GUID every boot,
+    // so several same-named rows accumulate. When that name appears at a new
+    // index there is no honest way to pick which history it continues.
+    ins8.run(83, '4',  'vSwitch (Default Switch)', 0, '89ES');
+    ins8.run(84, '24', 'vSwitch (Default Switch)', 0, '9QFE');
+    const ambiguous = { system: {}, vendorKey: null, identity: {}, entities: [
+        ...redeal.entities,
+        { kind: 'if', snmpIndex: '29', name: 'vSwitch (Default Switch)', tracked: false, extra: {} },
+        { kind: 'if', snmpIndex: '4',  name: 'Bluetooth Network Connection', tracked: false, extra: {} },
+    ] };
+    const r2 = reconcileDevice({ id: 8, name: 'desk' }, ambiguous, { untrack: false });
+    const dsw = db.prepare("SELECT * FROM entities WHERE device_id = 8 AND snmp_index = '29'").get();
+    check('two same-named candidates is ambiguous: a FRESH row is inserted rather than guessing',
+        dsw && dsw.id > 84 && r2.added.length === 2, JSON.stringify(r2.added));
+    const r83 = db.prepare('SELECT * FROM entities WHERE id = 83').get();
+    check('...and the row displaced from index 4 is PARKED on a tombstone, name intact, flagged stale',
+        r83.snmp_index === 'gone:4#83' && r83.name === 'vSwitch (Default Switch)' && r83.stale === 1, JSON.stringify(r83));
+    check('the untouched duplicate keeps its index', db.prepare('SELECT snmp_index FROM entities WHERE id = 84').get().snmp_index === '24');
+
+    // --- a genuine corpse: tracked, displaced, and nothing to rebind to ----
+    ins8.run(95, '18', 'Old NIC', 1, 'OLDN');   // id well clear of the autoincrement the inserts above consumed
+    const corpse = { system: {}, vendorKey: null, identity: {}, entities: [
+        ...ambiguous.entities,
+        { kind: 'if', snmpIndex: '18', name: '6to4 Adapter', tracked: false, extra: {} },
+    ] };
+    const r3 = reconcileDevice({ id: 8, name: 'desk' }, corpse, { untrack: false });
+    const old = db.prepare('SELECT * FROM entities WHERE id = 95').get();
+    check('the automatic path parks a displaced tracked row and leaves tracked ALONE (operator-owned)',
+        old.snmp_index === 'gone:18#95' && old.stale === 1 && old.tracked === 1 && r3.parked.length === 1, JSON.stringify(old));
+    check('...and does not report it twice (parked, not also flagged)', r3.flagged.length === 0, JSON.stringify(r3.flagged));
+    const r4 = reconcileDevice({ id: 8, name: 'desk' }, corpse, { untrack: true });
+    const retired = db.prepare('SELECT tracked, export, snmp_index FROM entities WHERE id = 95').get();
+    check('a later human Rediscover retires the parked corpse', retired.tracked === 0 && retired.export === 0 && r4.removed.length === 1, JSON.stringify(retired));
+
+    // --- a tombstone is never turned into an OID --------------------------
+    const P = require('../server/poller');
+    check('a parked if index is not pollable', P.isPollableIfIndex('gone:6#80') === false && P.isPollableIfIndex('moving:80') === false);
+    check('a real ifIndex is', P.isPollableIfIndex('6') === true && P.isPollableIfIndex(14) === true);
+
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall drift checks passed');
     process.exit(failures ? 1 : 0);
 })();

@@ -62,6 +62,10 @@ function concurrency() {
 function downSlotMax() { return Math.max(1, Math.floor(concurrency() / 2)); }
 const DEVICE_WALL_CLOCK_MS = 60 * 1000;   // hard cap per device poll
 const DOWN_AFTER_FAILURES = 2;            // one missed poll is not "down"
+// An ifIndex is an integer (RFC 2863). Anything else in an if row's snmp_index
+// is a reconciler tombstone, and must never be turned into an OID.
+function isPollableIfIndex(idx) { return /^\d+$/.test(String(idx)); }
+
 const META_REFRESH_EVERY = 12;            // ifName/ifAlias/ifHighSpeed refresh cadence
 const WRAP32 = 2n ** 32n;
 
@@ -284,6 +288,12 @@ async function pollDevice(device) {
             const oids = {};
             if (e.kind === 'if') {
                 const i = e.snmp_index;
+                // A parked row (see reconcile.js) carries a tombstone where an
+                // integer ifIndex should be. Its old index now answers as a
+                // different interface, so polling it would read that port's
+                // counters into this row's history - the splice, one poll at a
+                // time. Skip it; the page shows it stale until a human decides.
+                if (!isPollableIfIndex(i)) continue;
                 if (extra.hc) {
                     oids.inOct = `${O.IFX.ifHCInOctets}.${i}`;
                     oids.outOct = `${O.IFX.ifHCOutOctets}.${i}`;
@@ -659,9 +669,11 @@ async function runReindexQueue() {
                 // untrack:false - the automatic path may add and correct,
                 // never retire what an operator chose to track.
                 const summary = reconcileDevice(d, result, { untrack: false });
-                const changed = summary.added.length + summary.updated.length + summary.flagged.length;
+                const changed = summary.added.length + summary.rebound.length + summary.parked.length + summary.flagged.length;
                 log(`device ${d.id} (${d.host}) re-indexed: ${summary.added.length} added, ` +
-                    `${summary.updated.length} renamed, ${summary.flagged.length} flagged missing`);
+                    `${summary.rebound.length} followed their interface to a new index, ` +
+                    `${summary.parked.length} parked (index re-dealt to a different interface), ` +
+                    `${summary.flagged.length} flagged missing`);
                 if (changed > 0) { deviceChanged(d.id, true); exporter.scheduleWrite(); }
             } catch (err) {
                 // Loud but not fatal: the next trigger tries again after the
@@ -860,4 +872,4 @@ function setRollupMark(ts) {
 }
 
 module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged,
-    speedTrustAndClamp, sweepOrphanHistory, ROLLUP_SQL, PRUNE_SAMPLES_SQL };
+    speedTrustAndClamp, sweepOrphanHistory, isPollableIfIndex, ROLLUP_SQL, PRUNE_SAMPLES_SQL };
