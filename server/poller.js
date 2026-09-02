@@ -249,14 +249,26 @@ function health() {
     };
 }
 
-async function pollDevice(device) {
+// opts.session: a caller-supplied session, used INSTEAD of opening one. This
+// seam exists for tools/check-drift.js, which drives this real loop against a
+// recording session to prove that a parked (tombstoned) row never becomes a
+// varbind. That is a WIRING property - the `continue` in the loop below - and a
+// unit test of the predicate cannot see wiring; only running the loop can. A
+// supplied session is not closed here and gets no wall-clock deadline: it was
+// never ours.
+async function pollDevice(device, opts = {}) {
     const started = Date.now();
     const nowS = Math.floor(started / 1000);
-    const creds = loadCredentials(device.id);
-    if (!creds) return;
-    const target = { host: device.host, port: device.port, version: device.snmp_version, creds };
-    const session = S.createSession(target);
-    const deadline = setTimeout(() => S.closeQuietly(session), DEVICE_WALL_CLOCK_MS);
+    let session = opts.session || null;
+    let deadline = null;
+    const owned = !session;
+    if (owned) {
+        const creds = loadCredentials(device.id);
+        if (!creds) return;
+        const target = { host: device.host, port: device.port, version: device.snmp_version, creds };
+        session = S.createSession(target);
+        deadline = setTimeout(() => S.closeQuietly(session), DEVICE_WALL_CLOCK_MS);
+    }
 
     try {
         // 1. Liveness + reboot detection.
@@ -471,8 +483,10 @@ async function pollDevice(device) {
         // 5. Refresh the export file if any exported interface lives here.
         exporter.scheduleWrite();
     } finally {
-        clearTimeout(deadline);
-        S.closeQuietly(session);
+        if (owned) {
+            clearTimeout(deadline);
+            S.closeQuietly(session);
+        }
     }
 }
 
@@ -872,4 +886,4 @@ function setRollupMark(ts) {
 }
 
 module.exports = { start, stop, deviceChanged, deviceRemoved, prune, rollup, health, settingsChanged,
-    speedTrustAndClamp, sweepOrphanHistory, isPollableIfIndex, ROLLUP_SQL, PRUNE_SAMPLES_SQL };
+    speedTrustAndClamp, sweepOrphanHistory, isPollableIfIndex, pollDevice, ROLLUP_SQL, PRUNE_SAMPLES_SQL };

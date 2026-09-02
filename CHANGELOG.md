@@ -18,8 +18,10 @@
   histories under one code. A row whose index was taken and that nothing
   rebinds is parked on a tombstone, flagged stale, and left tracked for a
   human Rediscover to retire - it is never polled at the wrong index and
-  never exported. Rotations resolve in one pass. Fixture and three planted
-  defects in check-drift.js and check-export.js.
+  never exported. Rotations resolve in one pass. The poll loop itself is
+  driven end to end in check-drift.js against a recording session, so the
+  skip is proven as wiring, not just as a predicate. Fixture and four
+  planted defects across check-drift.js and check-export.js.
 
 - **The Windows interface patterns now read the name Windows actually uses.**
   On the stock Microsoft SNMP service, `ifName` is `ethernet_32774`-style and

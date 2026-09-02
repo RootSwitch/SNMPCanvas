@@ -199,6 +199,33 @@ function fakeSession(dead) {
     check('a parked if index is not pollable', P.isPollableIfIndex('gone:6#80') === false && P.isPollableIfIndex('moving:80') === false);
     check('a real ifIndex is', P.isPollableIfIndex('6') === true && P.isPollableIfIndex(14) === true);
 
+
+    // --- the WIRING: the real poll loop never asks for a tombstone ---------
+    // isPollableIfIndex being right is necessary and not sufficient - the
+    // `continue` that consults it has to actually sit in the loop that builds
+    // the varbind list. So drive pollDevice itself against a session that
+    // records every OID it is asked for. The tracked parked row is the
+    // dangerous case: still tracked, so the SELECT hands it to the loop.
+    const O = require('../server/oids');
+    ins8.run(900, 'gone:18#900', 'Old NIC (parked, still tracked)', 1, 'PRKD');   // id far above anything autoincrement reaches
+    const polledOids = [];
+    const recorder = {
+        get(oids, cb) {
+            polledOids.push(...oids);
+            cb(null, oids.map((oid) => ({ oid, type: 2, value: 42 })));
+        }
+    };
+    const dev8 = db.prepare('SELECT * FROM devices WHERE id = 8').get();
+    let pollErr = null;
+    try { await P.pollDevice(dev8, { session: recorder }); } catch (err) { pollErr = err; }
+    check('the real poll loop runs to completion against an injected session', pollErr === null, pollErr && pollErr.message);
+    check('...and it DID poll the live tracked row (so the loop was not short-circuited)',
+        polledOids.includes(`${O.IF.ifOperStatus}.3`), JSON.stringify(polledOids.slice(0, 6)));
+    check('the parked row, though tracked, was never turned into a varbind',
+        !polledOids.some((o) => o.includes('gone:')), JSON.stringify(polledOids.filter((o) => o.includes('gone:'))));
+    check('...and got no sample written under its history',
+        db.prepare('SELECT count(*) AS n FROM samples WHERE entity_id = 900').get().n === 0);
+
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall drift checks passed');
     process.exit(failures ? 1 : 0);
 })();
